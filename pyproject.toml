@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "solarapp"
+version = "0.1.0"
+description = "Quicklook webapp for solar & ionospheric physics data (Solar Flare Finder successor)"
+requires-python = ">=3.10"
+dependencies = [
+    "sunpy[net,timeseries]>=5.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "python-dateutil>=2.8",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+solarapp = "solarapp.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["solarapp*"]
+
+[tool.setuptools.package-data]
+"solarapp.server" = ["static/*"]

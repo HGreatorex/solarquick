@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SolarQuick</title>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; background:#0d1117; color:#e6edf3;
+         max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-weight: 600; font-size: 1.4rem; } h1 span { color:#f0a832; }
+  form { display:flex; gap:.5rem; margin:1rem 0; }
+  input { flex:1; padding:.7rem 1rem; font-size:1rem; border-radius:8px;
+          border:1px solid #30363d; background:#161b22; color:#e6edf3; }
+  button { padding:.7rem 1.2rem; font-size:1rem; border-radius:8px; border:none;
+           background:#f0a832; color:#0d1117; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  #msg { color:#ff7b72; margin:.5rem 0; white-space:pre-wrap; }
+  #meta { color:#8b949e; font-size:.85rem; margin-top:.5rem; }
+  #plot { width:100%; height:520px; }
+  .hint { color:#8b949e; font-size:.85rem; }
+</style>
+</head>
+<body>
+<h1>Solar<span>Quick</span></h1>
+<p class="hint">e.g. “show me the GOES SXR data for the 10th of July 2026” · “goes xrs from 2026-07-10 to 2026-07-12” · “goes sxr yesterday”</p>
+<form id="f">
+  <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
+  <button id="go">Plot</button>
+</form>
+<div id="msg"></div>
+<div id="plot"></div>
+<div id="meta"></div>
+<script>
+const f = document.getElementById("f"), q = document.getElementById("q"),
+      go = document.getElementById("go"), msg = document.getElementById("msg"),
+      meta = document.getElementById("meta");
+
+f.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  msg.textContent = ""; meta.textContent = ""; go.disabled = true; go.textContent = "Fetching…";
+  try {
+    const r = await fetch("/api/query", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({q: q.value})
+    });
+    const d = await r.json();
+    if (!r.ok) { msg.textContent = (d.errors || ["Request failed"]).join("\n"); return; }
+    render(d);
+  } catch (err) { msg.textContent = "Error: " + err; }
+  finally { go.disabled = false; go.textContent = "Plot"; }
+});
+
+function render(d) {
+  const traces = d.series.map(s => ({
+    x: s.times, y: s.values, name: s.name, mode: "lines", line: {width: 1.5}
+  }));
+  const shapes = [], annotations = [];
+  (d.bands || []).forEach((b, i) => {
+    if (i % 2) shapes.push({type:"rect", xref:"paper", x0:0, x1:1, yref:"y",
+      y0:b.y0, y1:b.y1, fillcolor:"rgba(255,255,255,0.04)", line:{width:0}});
+    annotations.push({xref:"paper", x:1.005, xanchor:"left", yref:"y",
+      y: Math.log10(Math.sqrt(b.y0*b.y1)), text:b.label, showarrow:false,
+      font:{color:"#8b949e", size:11}});
+  });
+  Plotly.newPlot("plot", traces, {
+    title: {text: d.title, font:{size:14}},
+    paper_bgcolor: "#0d1117", plot_bgcolor: "#161b22",
+    font: {color:"#e6edf3"},
+    xaxis: {title: d.xaxis?.label, gridcolor:"#30363d"},
+    yaxis: {title: d.yaxis?.label, type: d.yaxis?.type || "linear",
+            gridcolor:"#30363d", exponentformat:"power",
+            range: d.yaxis?.range ? d.yaxis.range.map(Math.log10) : undefined},
+    shapes, annotations,
+    legend: {orientation:"h", y:-0.2},
+    margin: {t:50, r:40}
+  }, {responsive: true});
+  const n = d.series.reduce((a,s)=>a+s.values.length, 0);
+  meta.textContent = `${n} points · ${d.provenance || ""}`;
+  if (n === 0) msg.textContent = "Query understood, but no data points in this interval (archive gap or future date?).";
+}
+</script>
+</body>
+</html>

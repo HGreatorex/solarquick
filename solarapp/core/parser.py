@@ -32,6 +32,7 @@ class ParsedQuery:
     source: str | None = None
     start: datetime | None = None
     end: datetime | None = None
+    extras: dict = field(default_factory=dict)  # source-specific options (e.g. wavelength)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -79,7 +80,7 @@ def _extract_time(query: str, matched_keywords: list[str]) -> tuple[datetime, da
 
     # strip source keywords + noise words, then fuzzy-parse what's left
     for kw in matched_keywords:
-        q = re.sub(re.escape(kw), " ", q, flags=re.I)
+        q = re.sub(rf"\b{re.escape(kw)}\b", " ", q, flags=re.I)
     q = _NOISE.sub(" ", q)
     try:
         dt, _ = dtparser.parse(q, fuzzy_with_tokens=True, dayfirst=True, default=today.replace(tzinfo=None))
@@ -99,7 +100,8 @@ def parse(query: str, registry: Registry) -> ParsedQuery:
         return result
 
     src = registry.get(result.source)
-    matched = [kw for kw in src.keywords if kw in query.lower()]
+    result.extras, consumed = src.parse_extras(query)
+    matched = [kw for kw in src.keywords if kw in query.lower()] + consumed
     tr = _extract_time(query, matched)
     if tr is None:
         result.errors.append(

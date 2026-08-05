@@ -22,8 +22,21 @@ class DataSource(ABC):
     keywords: list[str] = []  # phrases the parser matches (lowercase)
 
     @abstractmethod
-    def fetch(self, start: datetime, end: datetime) -> PlotSpec:
-        """Fetch data for [start, end] (UTC) and return a PlotSpec dict."""
+    def fetch(self, start: datetime, end: datetime, **extras: Any) -> PlotSpec:
+        """Fetch data for [start, end] (UTC) and return a PlotSpec dict.
+
+        `extras` are source-specific options produced by parse_extras()
+        (e.g. an AIA wavelength). Sources that take none ignore them.
+        """
+
+    def parse_extras(self, query: str) -> tuple[dict[str, Any], list[str]]:
+        """Extract source-specific options from the raw query.
+
+        Returns (extras, consumed_tokens): extras are forwarded to fetch() as
+        keyword arguments; consumed_tokens are stripped from the query before
+        date parsing so they can't be mistaken for a date (e.g. "171").
+        """
+        return {}, []
 
 
 class Registry:

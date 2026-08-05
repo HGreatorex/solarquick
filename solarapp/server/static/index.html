@@ -19,17 +19,34 @@
   #meta { color:#8b949e; font-size:.85rem; margin-top:.5rem; }
   #plot { width:100%; height:520px; }
   .hint { color:#8b949e; font-size:.85rem; }
+  #imgview { display:none; }
+  #imgview h2 { font-size:1rem; font-weight:600; text-align:center; margin:.5rem 0; }
+  #mainimg { display:block; max-width:640px; width:100%; margin:0 auto; border-radius:8px;
+             background:#161b22; cursor:zoom-in; }
+  #imgcap { text-align:center; color:#8b949e; font-size:.85rem; margin:.5rem 0; }
+  #thumbs { display:flex; gap:.4rem; justify-content:center; flex-wrap:wrap; margin:.5rem 0; }
+  #thumbs img { width:72px; height:72px; border-radius:6px; cursor:pointer;
+                border:2px solid transparent; background:#161b22; }
+  #thumbs img.sel { border-color:#f0a832; }
+  #note { color:#d29922; font-size:.85rem; text-align:center; margin:.5rem 0; }
 </style>
 </head>
 <body>
 <h1>Solar<span>Quick</span></h1>
-<p class="hint">e.g. “show me the GOES SXR data for the 10th of July 2026” · “goes xrs from 2026-07-10 to 2026-07-12” · “goes sxr yesterday”</p>
+<p class="hint">e.g. “show me the GOES SXR data for the 10th of July 2026” · “goes xrs from 2026-07-10 to 2026-07-12” · “sdo aia 304 yesterday” · “hmi magnetogram 2026-08-01”</p>
 <form id="f">
   <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
   <button id="go">Plot</button>
 </form>
 <div id="msg"></div>
 <div id="plot"></div>
+<div id="imgview">
+  <h2 id="imgtitle"></h2>
+  <img id="mainimg" alt="SDO image">
+  <div id="imgcap"></div>
+  <div id="thumbs"></div>
+  <div id="note"></div>
+</div>
 <div id="meta"></div>
 <script>
 const f = document.getElementById("f"), q = document.getElementById("q"),
@@ -51,7 +68,11 @@ f.addEventListener("submit", async (e) => {
   finally { go.disabled = false; go.textContent = "Plot"; }
 });
 
+const imgview = document.getElementById("imgview"), plotDiv = document.getElementById("plot");
+
 function render(d) {
+  if (d.kind === "images") return renderImages(d);
+  imgview.style.display = "none"; plotDiv.style.display = "block";
   const traces = d.series.map(s => ({
     x: s.times, y: s.values, name: s.name, mode: "lines", line: {width: 1.5}
   }));
@@ -78,6 +99,29 @@ function render(d) {
   const n = d.series.reduce((a,s)=>a+s.values.length, 0);
   meta.textContent = `${n} points · ${d.provenance || ""}`;
   if (n === 0) msg.textContent = "Query understood, but no data points in this interval (archive gap or future date?).";
+}
+
+function renderImages(d) {
+  Plotly.purge("plot"); plotDiv.style.display = "none"; imgview.style.display = "block";
+  document.getElementById("imgtitle").textContent = d.title;
+  document.getElementById("note").textContent = d.note || "";
+  const main = document.getElementById("mainimg"), cap = document.getElementById("imgcap"),
+        thumbs = document.getElementById("thumbs");
+  thumbs.innerHTML = "";
+  if (!d.images.length) { msg.textContent = "No images found for this interval."; return; }
+  const show = (i) => {
+    main.src = d.images[i].url; cap.textContent = d.images[i].caption;
+    main.onclick = () => window.open(d.images[i].url, "_blank");
+    [...thumbs.children].forEach((t, j) => t.classList.toggle("sel", j === i));
+  };
+  d.images.forEach((im, i) => {
+    const t = document.createElement("img");
+    t.src = im.url; t.title = im.caption; t.loading = "lazy";
+    t.addEventListener("click", () => show(i));
+    thumbs.appendChild(t);
+  });
+  show(0);
+  meta.textContent = `${d.images.length} frame(s) · ${d.provenance || ""}`;
 }
 </script>
 </body>

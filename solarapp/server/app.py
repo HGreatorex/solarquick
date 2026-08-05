@@ -38,7 +38,7 @@ def query(body: Query) -> JSONResponse:
         return JSONResponse({"errors": parsed.errors}, status_code=422)
     src = reg.get(parsed.source)
     try:
-        spec = src.fetch(parsed.start, parsed.end)
+        spec = src.fetch(parsed.start, parsed.end, **parsed.extras)
     except Exception as e:  # surfacing fetch problems to the UI beats a 500
         return JSONResponse({"errors": [f"{src.display_name}: {e}"]}, status_code=502)
     spec["parsed"] = {

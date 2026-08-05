@@ -23,5 +23,7 @@ learns its keywords. See `ARCHITECTURE.md`.
 
 - [x] Core: plugin registry, rule-based query parser, FastAPI server, Plotly UI
 - [x] GOES XRS source (NCEI archive via sunpy/Fido + SWPC realtime JSON for last 7 days)
+- [x] SDO images (AIA 94–4500 Å + HMI magnetogram/continuum via Helioviewer;
+      e.g. "sdo aia 304 yesterday", "hmi magnetogram 2026-08-01")
 - [ ] More sources (SDO/EVE, STIX, ionosonde/TEC...)
 - [ ] Multi-source overlay, HEK event annotations

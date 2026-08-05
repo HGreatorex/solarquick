@@ -35,7 +35,7 @@ class GoesXRS(DataSource):
         "goes", "xrs", "sxr", "soft x-ray", "x-ray flux",
     ]
 
-    def fetch(self, start: datetime, end: datetime) -> PlotSpec:
+    def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         now = datetime.now(timezone.utc)
         if start > now - timedelta(days=7):
             series = self._fetch_swpc(start, end)

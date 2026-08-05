@@ -28,7 +28,8 @@ solarapp/
 │   │   ├── registry.py      ← DataSource base class + auto-discovery of sources/
 │   │   └── parser.py        ← rule-based NL parser (source keywords + dates)
 │   ├── sources/
-│   │   └── goes_xrs.py      ← v1: GOES XRS (NCEI archive via Fido, SWPC JSON for recent)
+│   │   ├── goes_xrs.py      ← v1: GOES XRS (NCEI archive via Fido, SWPC JSON for recent)
+│   │   └── sdo_images.py    ← v2: SDO AIA/HMI full-disk quicklook images via Helioviewer
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query, /api/sources, serves static/
 │       └── static/index.html← single-page UI: query box + Plotly plot
@@ -54,12 +55,19 @@ class MySource(DataSource):
     name = "my_source"
     display_name = "My Instrument"
     keywords = ["mymission", "instrument nickname", ...]   # parser vocabulary
-    def fetch(self, start: datetime, end: datetime) -> PlotSpec: ...
+    def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec: ...
+    # optional: pull source-specific options out of the raw query.
+    # Returns (extras, consumed_tokens); consumed tokens are stripped before
+    # date parsing (so "aia 171" doesn't feed 171 to the date parser).
+    def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
 ```
 
-**PlotSpec** (dict): `title`, `series: [{name, times[iso], values[]}]`,
-`yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
-Extend later with `kind: "image"|"spectrogram"` for imagers/radio.
+**PlotSpec** (dict), two kinds:
+- timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
+  `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
+- `kind: "images"`: `title`, `images: [{time, url, caption}]`, optional `note`.
+  Frontend shows a main image + clickable thumbnail filmstrip.
+Extend later with `kind: "spectrogram"` for radio.
 
 ## Caveats (read before extending)
 
@@ -72,14 +80,21 @@ Extend later with `kind: "image"|"spectrogram"` for imagers/radio.
   message listing available sources. It is not (yet) an AI.
 - **Satellite choice**: defaults to primary GOES; `a.goes.SatelliteNumber` can be
   exposed as a query option later ("goes-16 sxr ...").
+- **SDO images are Helioviewer browse products** (JPEG2000 → server-rendered PNG):
+  perfect for quicklook, not calibrated science data. The backend samples ≤8 times
+  across the interval, resolves each to the nearest real image (getClosestImage),
+  dedupes, and the browser loads takeScreenshot URLs directly from helioviewer.org.
+  Helioviewer's ingestion lags real time by hours — "yesterday" may return fewer
+  frames than requested; captions always show the true image time.
 
 ## Roadmap
 
-- v1 (this build): GOES XRS quicklook, free-text query, single-day/range plots.
-- v2: more timeseries sources (SDO/EVE, ionosonde/GNSS TEC, RHESSI/STIX counts),
-  multi-source overlay ("show GOES and STIX for..."), HEK flare-event annotations.
-- v3: image quicklook (AIA thumbnails), spectrograms (radio), export (PNG/CSV),
-  optional LLM query layer, deploy as hosted service.
+- v1: GOES XRS quicklook, free-text query, single-day/range plots.
+- v2 (this build): SDO image quicklook (AIA all channels + HMI magnetogram/continuum
+  via Helioviewer), per-source query options (wavelength), image filmstrip UI.
+- next: more timeseries sources (SDO/EVE, ionosonde/GNSS TEC, RHESSI/STIX counts),
+  multi-source overlay ("show GOES and STIX for..."), HEK flare-event annotations,
+  spectrograms (radio), export (PNG/CSV), optional LLM query layer, hosted deploy.
 
 ## Handoff notes (Fable → Opus continuation)
 

@@ -33,7 +33,7 @@
 </head>
 <body>
 <h1>Solar<span>Quick</span></h1>
-<p class="hint">e.g. “show me the GOES SXR data for the 10th of July 2026” · “goes xrs from 2026-07-10 to 2026-07-12” · “sdo aia 304 yesterday” · “hmi magnetogram 2026-08-01”</p>
+<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 yesterday” · “lasco c3 2026-08-01” · “solar orbiter stix yesterday” · “wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “hinode sot 2013-11-15”</p>
 <form id="f">
   <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
   <button id="go">Plot</button>
@@ -56,6 +56,7 @@ const f = document.getElementById("f"), q = document.getElementById("q"),
 f.addEventListener("submit", async (e) => {
   e.preventDefault();
   msg.textContent = ""; meta.textContent = ""; go.disabled = true; go.textContent = "Fetching…";
+  msg.style.color = "";
   try {
     const r = await fetch("/api/query", {
       method: "POST", headers: {"Content-Type": "application/json"},
@@ -88,7 +89,7 @@ function render(d) {
     if (s.kind === "spectrogram") { plotSpectrogram(el, s); points += s.times.length * s.freqs.length; }
     else { plotTimeseries(el, s, specs.length > 1); points += s.series.reduce((a,x)=>a+x.values.length, 0); }
   });
-  if (d.note) msg.textContent = d.note;
+  if (d.note) { msg.textContent = d.note; msg.style.color = "#d29922"; }
   meta.textContent = `${points} points · ${d.provenance || ""}`;
   if (points === 0) msg.textContent = "Query understood, but no data points in this interval (archive gap or future date?).";
 }

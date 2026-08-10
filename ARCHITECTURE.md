@@ -27,9 +27,24 @@ solarapp/
 │   ├── core/
 │   │   ├── registry.py      ← DataSource base class + auto-discovery of sources/
 │   │   └── parser.py        ← rule-based NL parser (source keywords + dates)
+│   ├── core/  (also)
+│   │   ├── helioviewer.py   ← shared Helioviewer image pipeline (channel tables)
+│   │   ├── tsutil.py        ← mission-span guard, df→series, clip, downsample
+│   │   └── fetchcache.py    ← ~/.cache/solarapp download cache + dir listings
 │   ├── sources/
-│   │   ├── goes_xrs.py      ← v1: GOES XRS (NCEI archive via Fido, SWPC JSON for recent)
-│   │   └── sdo_images.py    ← v2: SDO AIA/HMI full-disk quicklook images via Helioviewer
+│   │   ├── goes_xrs.py      ← GOES XRS (NCEI archive via Fido, SWPC JSON for recent)
+│   │   ├── goes_euvs.py     ← GOES EUVS lines + MgII (NCEI netCDF; primary-sat default)
+│   │   ├── sdo_images.py    ← SDO AIA/HMI images via Helioviewer
+│   │   ├── sdo_eve.py       ← SDO EVE L2B lines & spectra (LASP)
+│   │   ├── soho_images.py   ← SOHO EIT + LASCO C2/C3 via Helioviewer
+│   │   ├── solo_eui.py      ← Solar Orbiter EUI FSI/HRI via Helioviewer
+│   │   ├── solo_stix.py     ← Solar Orbiter STIX quicklook (STIX Data Center API)
+│   │   ├── proba2_swap.py   ← PROBA2 SWAP 174 Å via Helioviewer
+│   │   ├── proba2_lyra.py   ← PROBA2 LYRA lev3 via Fido
+│   │   ├── rhessi.py        ← RHESSI observing summary via Fido (2002–2018)
+│   │   ├── fermi_gbm.py     ← Fermi GBM CTIME via Fido (detector option)
+│   │   ├── wind_waves.py    ← Wind/WAVES RAD1+RAD2 spectrograms (SPDF L2 CDF)
+│   │   └── hinode_sot.py    ← Hinode SOT filtergrams via VSO (FITS → PNG data URIs)
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query, /api/sources, serves static/
 │       └── static/index.html← single-page UI: query box + Plotly plot
@@ -62,12 +77,17 @@ class MySource(DataSource):
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
 ```
 
-**PlotSpec** (dict), two kinds:
+**PlotSpec** (dict), four kinds:
 - timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
   `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
+  A series may use numeric `x` instead of `times` (spectra: irradiance vs nm).
 - `kind: "images"`: `title`, `images: [{time, url, caption}]`, optional `note`.
-  Frontend shows a main image + clickable thumbnail filmstrip.
-Extend later with `kind: "spectrogram"` for radio.
+  Frontend shows a main image + clickable thumbnail filmstrip. `url` may be a
+  data URI (Hinode SOT renders FITS server-side).
+- `kind: "spectrogram"`: `times[]`, `freqs[]`, `z[freq][time]`, `zrange`,
+  `zlabel` — rendered as a Plotly heatmap (Wind/WAVES).
+- `kind: "panels"`: `panels: [spec...]` — stacked subplots (GOES EUVS
+  channel groups, WAVES RAD2/RAD1).
 
 ## Caveats (read before extending)
 
@@ -80,21 +100,38 @@ Extend later with `kind: "spectrogram"` for radio.
   message listing available sources. It is not (yet) an AI.
 - **Satellite choice**: defaults to primary GOES; `a.goes.SatelliteNumber` can be
   exposed as a query option later ("goes-16 sxr ...").
-- **SDO images are Helioviewer browse products** (JPEG2000 → server-rendered PNG):
-  perfect for quicklook, not calibrated science data. The backend samples ≤8 times
-  across the interval, resolves each to the nearest real image (getClosestImage),
-  dedupes, and the browser loads takeScreenshot URLs directly from helioviewer.org.
-  Helioviewer's ingestion lags real time by hours — "yesterday" may return fewer
-  frames than requested; captions always show the true image time.
+- **Helioviewer-backed images are browse products** (JPEG2000 → server-rendered
+  PNG): perfect for quicklook, not calibrated science data. The backend samples
+  ≤8 times across the interval, resolves each to the nearest real image
+  (getClosestImage), dedupes, and the browser loads takeScreenshot URLs directly.
+  Ingestion lags real time by hours (EUI: weeks–months, SOAR releases);
+  captions always show the true image time.
+- **Archive latencies**: LASP EVE ~2 days; NCEI EUVS ~1–2 weeks; SPDF WAVES L2
+  a few weeks; STIX downlink gaps of days–weeks are normal.
+- **Instrument lifetimes** are enforced with friendly errors: RHESSI
+  2002-02-12–2018-04-11; Hinode SOT 2006-10-25–2016-02-25 (campaign-based,
+  many empty days); EVE MEGS-A (λ ≲ 33 nm) lost 2014-05-26, MEGS-B at reduced
+  duty cycle; GOES-R EUVS from 2017-02-07 (GOES-16), GOES-19 primary from
+  2025-04-07.
+- **Fermi GBM is an all-sky monitor**: detector choice matters (default n5,
+  override "gbm n3 ..."), solar pointing not guaranteed.
+- **High-cadence series are mean-downsampled** (~3000 points/series) before
+  hitting the browser (GBM 0.256 s, RHESSI 4 s, STIX 4 s).
+- **Wind/WAVES intensity** is 10·log10(PSD/daily-background) — the standard
+  quicklook normalisation, not absolute flux.
 
 ## Roadmap
 
 - v1: GOES XRS quicklook, free-text query, single-day/range plots.
-- v2 (this build): SDO image quicklook (AIA all channels + HMI magnetogram/continuum
-  via Helioviewer), per-source query options (wavelength), image filmstrip UI.
-- next: more timeseries sources (SDO/EVE, ionosonde/GNSS TEC, RHESSI/STIX counts),
-  multi-source overlay ("show GOES and STIX for..."), HEK flare-event annotations,
-  spectrograms (radio), export (PNG/CSV), optional LLM query layer, hosted deploy.
+- v2: SDO image quicklook (AIA + HMI via Helioviewer), per-source query
+  options, image filmstrip UI.
+- v3/v4 (this build): SOHO EIT/LASCO, PROBA2 SWAP+LYRA, SolO EUI+STIX,
+  RHESSI, Fermi GBM, Wind/WAVES spectrograms, SDO EVE lines/spectra,
+  GOES EUVS multi-panel, Hinode SOT; spectrogram/panels/spectrum plot kinds.
+- next: (1) multi-source overlay ("show GOES and STIX for..."), (2) synoptic
+  data (spacecraft/planet positions relative to the Sun), (3) Earth
+  illumination plots. Later: HEK event annotations, export (PNG/CSV),
+  optional LLM query layer, hosted deploy.
 
 ## Handoff notes (Fable → Opus continuation)
 

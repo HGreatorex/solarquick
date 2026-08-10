@@ -25,5 +25,15 @@ learns its keywords. See `ARCHITECTURE.md`.
 - [x] GOES XRS source (NCEI archive via sunpy/Fido + SWPC realtime JSON for last 7 days)
 - [x] SDO images (AIA 94–4500 Å + HMI magnetogram/continuum via Helioviewer;
       e.g. "sdo aia 304 yesterday", "hmi magnetogram 2026-08-01")
-- [ ] More sources (SDO/EVE, STIX, ionosonde/TEC...)
-- [ ] Multi-source overlay, HEK event annotations
+- [x] SOHO EIT + LASCO C2/C3, PROBA2 SWAP, Solar Orbiter EUI (Helioviewer images)
+- [x] RHESSI, Fermi GBM, PROBA2 LYRA, SolO STIX lightcurves
+      ("rhessi 2003-10-28", "gbm n3 2022-04-20", "solar orbiter stix yesterday")
+- [x] Wind/WAVES radio dynamic spectra ("wind waves 2026-07-11")
+- [x] SDO EVE L2 lines & spectra ("eve he ii 304 yesterday", "eve spectrum 2026-08-05")
+- [x] GOES EUVS lines + MgII, primary-satellite default, multi-panel
+      ("euvs yesterday", "goes-16 euvs lyman alpha 2023-01-01")
+- [x] Hinode SOT filtergrams via VSO ("hinode sot 2013-11-15")
+- [ ] Multi-source overlay (one request, several datasets)
+- [ ] Synoptic data: spacecraft/planet positions relative to the Sun
+- [ ] Earth illumination plots
+- [ ] HEK event annotations

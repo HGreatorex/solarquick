@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "solarapp"
-version = "0.1.0"
+version = "0.4.0"
 description = "Quicklook webapp for solar & ionospheric physics data (Solar Flare Finder successor)"
 requires-python = ">=3.10"
 dependencies = [
@@ -13,6 +13,10 @@ dependencies = [
     "uvicorn>=0.29",
     "python-dateutil>=2.8",
     "requests>=2.31",
+    "numpy>=1.24",
+    "cdflib>=1.0",      # Wind/WAVES L2 CDFs
+    "h5netcdf>=1.0",    # GOES EUVS netCDF
+    "matplotlib>=3.7",  # Hinode SOT FITS rendering
 ]
 
 [project.optional-dependencies]

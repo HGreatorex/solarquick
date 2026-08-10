@@ -77,7 +77,7 @@ class MySource(DataSource):
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
 ```
 
-**PlotSpec** (dict), six kinds:
+**PlotSpec** (dict), seven kinds:
 - timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
   `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
   A series may use numeric `x` instead of `times` (spectra: irradiance vs nm).
@@ -94,6 +94,10 @@ class MySource(DataSource):
 - `kind: "positions"`: `bodies: [{name, type, color, x, y, r, lon_deg,
   trail?}]` — synoptic ecliptic-plane map (Sun at origin, Earth-Sun line
   fixed at 0°), equal-aspect scatter with orbit guides and motion trails.
+- `kind: "earthmap"`: `shading: [{lon, lat, opacity, label}]` (null-separated
+  parallel segments), `lines` (terminator), `points` (subsolar), optional
+  `track` — day/night world map on Plotly's built-in geo (scattergeo,
+  natural earth projection; topojson comes from the Plotly CDN).
 
 ## Caveats (read before extending)
 
@@ -143,8 +147,13 @@ class MySource(DataSource):
   + PSP/SolO/STEREO-A/BepiColombo (JPL Horizons) on a Stonyhurst
   ecliptic-plane map; single epoch for ≤1-day queries, motion trails for
   ranges ("where is psp from 2026-06-01 to 2026-08-01").
-- next: Earth illumination plots. Later: HEK event annotations, export
-  (PNG/CSV), optional LLM query layer, hosted deploy.
+- v7 (this build): Earth illumination — terminator + civil/nautical/
+  astronomical twilight bands and the subsolar point from astropy (sunrise
+  equation on parallels); multi-day ranges add a fixed-UT daily subsolar
+  track (free-running sampling would alias — the point circles the globe
+  daily).
+- Later: HEK event annotations, export (PNG/CSV), optional LLM query
+  layer, hosted deploy.
 
 ## Handoff notes (Fable → Opus continuation)
 

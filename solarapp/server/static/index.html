@@ -32,7 +32,7 @@
 </head>
 <body>
 <h1>Solar<span>Quick</span></h1>
-<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 and goes xrs yesterday” · “lasco c3 2026-08-01” · “stix and wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “positions today” · “where is psp from 2026-06-01 to 2026-08-01”</p>
+<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 and goes xrs yesterday” · “lasco c3 2026-08-01” · “stix and wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “positions today” · “where is psp from 2026-06-01 to 2026-08-01” · “terminator today”</p>
 <form id="f">
   <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
   <button id="go">Plot</button>
@@ -73,7 +73,7 @@ function render(d) {
   const items = d.kind === "multi" ? d.items : [d];
   const stats = {points: 0, frames: 0, provenance: []};
   items.forEach(item => renderItem(item, items.length > 1, stats));
-  const notes = [d.note, ...items.map(i => i.note)].filter(Boolean);
+  const notes = (d.kind === "multi" ? [d.note, ...items.map(i => i.note)] : [d.note]).filter(Boolean);
   if (notes.length) { msg.textContent = notes.join("\n"); msg.style.color = "#d29922"; }
   const bits = [];
   if (stats.points) bits.push(`${stats.points} points`);
@@ -94,6 +94,7 @@ function renderItem(item, compact, stats) {
     plotDiv.appendChild(el);
     if (s.kind === "spectrogram") { plotSpectrogram(el, s); stats.points += s.times.length * s.freqs.length; }
     else if (s.kind === "positions") { plotPositions(el, s); stats.points += s.bodies.length; }
+    else if (s.kind === "earthmap") { plotEarthmap(el, s); stats.points += 1; }
     else { plotTimeseries(el, s, compact || specs.length > 1); stats.points += s.series.reduce((a,x)=>a+x.values.length, 0); }
   });
 }
@@ -168,6 +169,45 @@ function plotPositions(el, d) {
     yaxis: {range: [-R, R], gridcolor: "#21262d", zeroline: false,
             scaleanchor: "x", scaleratio: 1},
     shapes, showlegend: false, margin: {t: 40, r: 20},
+  }, {responsive: true});
+}
+
+function plotEarthmap(el, d) {
+  const traces = [];
+  (d.shading || []).forEach(b => traces.push({
+    type: "scattergeo", mode: "lines", lon: b.lon, lat: b.lat,
+    line: {color: "#000000", width: 7}, opacity: b.opacity,
+    hoverinfo: "skip", name: b.label, showlegend: false,
+  }));
+  (d.lines || []).forEach(l => traces.push({
+    type: "scattergeo", mode: "lines", lon: l.lon, lat: l.lat,
+    line: {color: "#f0a832", width: 1.5}, name: l.name,
+    hoverinfo: "skip", showlegend: false,
+  }));
+  if (d.track) traces.push({
+    type: "scattergeo", mode: "lines+markers", lon: d.track.lon, lat: d.track.lat,
+    line: {color: "#e2604d", width: 1.5, dash: "dot"}, marker: {size: 3},
+    name: d.track.name, hoverinfo: "skip", showlegend: false,
+  });
+  (d.points || []).forEach(p => traces.push({
+    type: "scattergeo", mode: "markers", lon: [p.lon], lat: [p.lat],
+    marker: {symbol: "star", size: 14, color: "#f0a832"},
+    hovertemplate: `${p.name}<br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<extra></extra>`,
+    showlegend: false,
+  }));
+  Plotly.newPlot(el, traces, {
+    ...DARK,
+    title: {text: d.title, font: {size: 13}},
+    geo: {
+      projection: {type: "natural earth"}, bgcolor: "#0d1117",
+      showcoastlines: true, coastlinecolor: "#8b949e", coastlinewidth: 0.7,
+      showland: true, landcolor: "#2d333b",
+      showocean: true, oceancolor: "#161b22",
+      showcountries: false, showframe: false,
+      lataxis: {showgrid: true, gridcolor: "#21262d", dtick: 30},
+      lonaxis: {showgrid: true, gridcolor: "#21262d", dtick: 60},
+    },
+    margin: {t: 40, b: 10, l: 10, r: 10},
   }, {responsive: true});
 }
 

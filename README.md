@@ -38,5 +38,6 @@ learns its keywords. See `ARCHITECTURE.md`.
 
 - [x] Synoptic positions: Mercury–Mars + PSP/SolO/STEREO-A/BepiColombo
       ("positions today", "where is psp from 2026-06-01 to 2026-08-01")
-- [ ] Earth illumination plots
+- [x] Earth illumination: terminator + twilight bands + subsolar point/track
+      ("terminator today", "day night map from 2026-06-01 to 2026-07-01")
 - [ ] HEK event annotations

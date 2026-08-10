@@ -45,12 +45,21 @@ def _utc(dt: datetime) -> datetime:
 
 
 def _match_source(query: str, registry: Registry) -> str | None:
+    """Score = summed length of all keywords found (word-boundary matched).
+
+    Summing (rather than longest-match) lets multi-word context win:
+    "solar orbiter stix" scores STIX (stix + solar orbiter stix) above
+    EUI (solar orbiter), and "goes euvs" scores EUVS above GOES XRS.
+    """
     q = query.lower()
-    best, best_len = None, 0
+    best, best_score = None, 0
     for src in registry.sources.values():
-        for kw in src.keywords:
-            if kw in q and len(kw) > best_len:
-                best, best_len = src.name, len(kw)
+        score = sum(
+            len(kw) for kw in src.keywords
+            if re.search(rf"\b{re.escape(kw)}\b", q)
+        )
+        if score > best_score:
+            best, best_score = src.name, score
     return best
 
 
@@ -101,7 +110,9 @@ def parse(query: str, registry: Registry) -> ParsedQuery:
 
     src = registry.get(result.source)
     result.extras, consumed = src.parse_extras(query)
-    matched = [kw for kw in src.keywords if kw in query.lower()] + consumed
+    matched = [
+        kw for kw in src.keywords if re.search(rf"\b{re.escape(kw)}\b", query.lower())
+    ] + consumed
     tr = _extract_time(query, matched)
     if tr is None:
         result.errors.append(

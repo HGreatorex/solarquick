@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
+from solarapp.core.helioviewer import MAX_FRAMES, sample_times
 from solarapp.core.parser import parse
 from solarapp.core.registry import get_registry
-from solarapp.sources.sdo_images import CHANNELS, MAX_FRAMES, SdoImages, sample_times
+from solarapp.sources.sdo_images import CHANNELS, SdoImages
 
 REG = get_registry()
 
@@ -72,7 +73,8 @@ def test_sample_times_short_interval():
 
 def test_screenshot_url():
     src = SdoImages()
-    url = src._screenshot_url(d(2026, 7, 10), CHANNELS["aia_171"]["layer"])
+    url = src._screenshot_url(d(2026, 7, 10), CHANNELS["aia_171"])
     assert "date=2026-07-10T00:00:00Z" in url
     assert "[SDO,AIA,AIA,171,1,100]" in url
+    assert "imageScale=2.4" in url
     assert "takeScreenshot" in url

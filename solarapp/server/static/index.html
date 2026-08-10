@@ -70,11 +70,32 @@ f.addEventListener("submit", async (e) => {
 
 const imgview = document.getElementById("imgview"), plotDiv = document.getElementById("plot");
 
+const DARK = {
+  paper_bgcolor: "#0d1117", plot_bgcolor: "#161b22", font: {color:"#e6edf3"},
+};
+
 function render(d) {
+  plotDiv.innerHTML = "";
   if (d.kind === "images") return renderImages(d);
   imgview.style.display = "none"; plotDiv.style.display = "block";
+  const specs = d.kind === "panels" ? d.panels : [d];
+  plotDiv.style.height = "auto";
+  let points = 0;
+  specs.forEach(s => {
+    const el = document.createElement("div");
+    el.style.height = specs.length > 1 ? "300px" : "520px";
+    plotDiv.appendChild(el);
+    if (s.kind === "spectrogram") { plotSpectrogram(el, s); points += s.times.length * s.freqs.length; }
+    else { plotTimeseries(el, s, specs.length > 1); points += s.series.reduce((a,x)=>a+x.values.length, 0); }
+  });
+  if (d.note) msg.textContent = d.note;
+  meta.textContent = `${points} points · ${d.provenance || ""}`;
+  if (points === 0) msg.textContent = "Query understood, but no data points in this interval (archive gap or future date?).";
+}
+
+function plotTimeseries(el, d, compact) {
   const traces = d.series.map(s => ({
-    x: s.times, y: s.values, name: s.name, mode: "lines", line: {width: 1.5}
+    x: s.times || s.x, y: s.values, name: s.name, mode: "lines", line: {width: 1.5}
   }));
   const shapes = [], annotations = [];
   (d.bands || []).forEach((b, i) => {
@@ -84,21 +105,31 @@ function render(d) {
       y: Math.log10(Math.sqrt(b.y0*b.y1)), text:b.label, showarrow:false,
       font:{color:"#8b949e", size:11}});
   });
-  Plotly.newPlot("plot", traces, {
-    title: {text: d.title, font:{size:14}},
-    paper_bgcolor: "#0d1117", plot_bgcolor: "#161b22",
-    font: {color:"#e6edf3"},
+  Plotly.newPlot(el, traces, {
+    ...DARK,
+    title: {text: d.title, font:{size: compact ? 12 : 14}},
     xaxis: {title: d.xaxis?.label, gridcolor:"#30363d"},
     yaxis: {title: d.yaxis?.label, type: d.yaxis?.type || "linear",
             gridcolor:"#30363d", exponentformat:"power",
             range: d.yaxis?.range ? d.yaxis.range.map(Math.log10) : undefined},
     shapes, annotations,
-    legend: {orientation:"h", y:-0.2},
-    margin: {t:50, r:40}
+    legend: {orientation:"h", y: compact ? -0.3 : -0.2},
+    margin: {t: compact ? 35 : 50, r:40, b: compact ? 30 : undefined}
   }, {responsive: true});
-  const n = d.series.reduce((a,s)=>a+s.values.length, 0);
-  meta.textContent = `${n} points · ${d.provenance || ""}`;
-  if (n === 0) msg.textContent = "Query understood, but no data points in this interval (archive gap or future date?).";
+}
+
+function plotSpectrogram(el, d) {
+  Plotly.newPlot(el, [{
+    type: "heatmap", x: d.times, y: d.freqs, z: d.z,
+    colorscale: "Viridis", zmin: d.zrange?.[0], zmax: d.zrange?.[1],
+    colorbar: {title: {text: d.zlabel || "", side: "right"}, thickness: 12}
+  }], {
+    ...DARK,
+    title: {text: d.title, font:{size:12}},
+    xaxis: {title: d.xaxis?.label, gridcolor:"#30363d"},
+    yaxis: {title: d.yaxis?.label, type: d.yaxis?.type || "linear", gridcolor:"#30363d"},
+    margin: {t:35, r:20, b:30}
+  }, {responsive: true});
 }
 
 function renderImages(d) {

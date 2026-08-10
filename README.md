@@ -36,6 +36,7 @@ learns its keywords. See `ARCHITECTURE.md`.
 - [x] Multi-source queries ("sdo aia 304 and goes xrs yesterday", "goes, stix
       and lasco c2 for 2026-07-10") — concurrent fetch, stacked results
 
-- [ ] Synoptic data: spacecraft/planet positions relative to the Sun
+- [x] Synoptic positions: Mercury–Mars + PSP/SolO/STEREO-A/BepiColombo
+      ("positions today", "where is psp from 2026-06-01 to 2026-08-01")
 - [ ] Earth illumination plots
 - [ ] HEK event annotations

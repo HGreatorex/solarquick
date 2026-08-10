@@ -77,7 +77,7 @@ class MySource(DataSource):
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
 ```
 
-**PlotSpec** (dict), five kinds:
+**PlotSpec** (dict), six kinds:
 - timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
   `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
   A series may use numeric `x` instead of `times` (spectra: irradiance vs nm).
@@ -91,6 +91,9 @@ class MySource(DataSource):
 - `kind: "multi"`: `items: [spec...]` — one block per requested source
   (server-assembled for multi-source queries), any of the kinds above;
   optional `note` lists sources that failed.
+- `kind: "positions"`: `bodies: [{name, type, color, x, y, r, lon_deg,
+  trail?}]` — synoptic ecliptic-plane map (Sun at origin, Earth-Sun line
+  fixed at 0°), equal-aspect scatter with orbit guides and motion trails.
 
 ## Caveats (read before extending)
 
@@ -136,8 +139,11 @@ class MySource(DataSource):
   (same source may repeat with different options), fetched concurrently,
   rendered as stacked blocks; per-source failures reported without sinking
   the rest.
-- next: (1) synoptic data (spacecraft/planet positions relative to the Sun),
-  (2) Earth illumination plots. Later: HEK event annotations, export
+- v6 (this build): synoptic positions — inner planets (astropy ephemeris)
+  + PSP/SolO/STEREO-A/BepiColombo (JPL Horizons) on a Stonyhurst
+  ecliptic-plane map; single epoch for ≤1-day queries, motion trails for
+  ranges ("where is psp from 2026-06-01 to 2026-08-01").
+- next: Earth illumination plots. Later: HEK event annotations, export
   (PNG/CSV), optional LLM query layer, hosted deploy.
 
 ## Handoff notes (Fable → Opus continuation)

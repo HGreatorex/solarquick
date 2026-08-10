@@ -17,6 +17,7 @@ dependencies = [
     "cdflib>=1.0",      # Wind/WAVES L2 CDFs
     "h5netcdf>=1.0",    # GOES EUVS netCDF
     "matplotlib>=3.7",  # Hinode SOT FITS rendering
+    "astroquery>=0.4.7", # JPL Horizons spacecraft ephemerides (positions)
 ]
 
 [project.optional-dependencies]

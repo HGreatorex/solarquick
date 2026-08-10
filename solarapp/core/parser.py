@@ -1,9 +1,13 @@
 """Rule-based natural language query parser.
 
 Two jobs:
-1. Which data source?  Match plugin keywords (longest match wins).
+1. Which data source(s)?  The query is split on conjunctions ("and", "with",
+   commas, ...) and each segment is matched against plugin keywords, so
+   "goes xrs and aia 304 yesterday" yields two requests. Date ranges are
+   masked before splitting so "between A and B" survives intact.
 2. What time range?    ISO ranges, single dates ("10th of July 2026"),
                        relative words (today / yesterday). Day-first, UTC.
+                       One time range applies to every requested source.
 No AI, no network, deterministic. An LLM layer can later wrap the same interface.
 """
 from __future__ import annotations
@@ -25,14 +29,25 @@ _NOISE = re.compile(
     r"\b(show|me|the|plot|display|give|get|data|for|on|please|quicklook|of|from)\b",
     re.I,
 )
+# conjunctions that separate one requested source from the next
+_CONJ = re.compile(r"\band\b|\bwith\b|\bplus\b|\bvs\.?\b|[,+&]", re.I)
+
+
+@dataclass
+class SourceRequest:
+    source: str
+    extras: dict = field(default_factory=dict)
 
 
 @dataclass
 class ParsedQuery:
+    # every requested source, in query order; single-source queries have one
+    requests: list[SourceRequest] = field(default_factory=list)
+    # first request, kept as plain fields for convenience/back-compat
     source: str | None = None
+    extras: dict = field(default_factory=dict)
     start: datetime | None = None
     end: datetime | None = None
-    extras: dict = field(default_factory=dict)  # source-specific options (e.g. wavelength)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -99,19 +114,55 @@ def _extract_time(query: str, matched_keywords: list[str]) -> tuple[datetime, da
         return None
 
 
+def _match_requests(query: str, registry: Registry) -> tuple[list[SourceRequest], list[str]]:
+    """Match one source per conjunction-separated segment (deduplicated).
+
+    Returns (requests, consumed_tokens). Falls back to whole-query matching
+    when no individual segment matches (e.g. keywords split by a stray comma).
+    """
+    masked = _RANGE_RE.sub(" § ", query)  # protect "between A and B" from the split
+    segments = [s for s in _CONJ.split(masked) if s.strip()]
+
+    requests: list[SourceRequest] = []
+    consumed: list[str] = []
+    seen: set[tuple] = set()
+    for seg in segments:
+        name = _match_source(seg, registry)
+        if name is None:
+            continue
+        extras, used = registry.get(name).parse_extras(seg)
+        key = (name, tuple(sorted((k, repr(v)) for k, v in extras.items())))
+        if key in seen:
+            continue
+        seen.add(key)
+        consumed += used
+        requests.append(SourceRequest(name, extras))
+
+    if not requests:  # no segment matched — try the whole query
+        name = _match_source(query, registry)
+        if name is not None:
+            extras, used = registry.get(name).parse_extras(query)
+            consumed += used
+            requests.append(SourceRequest(name, extras))
+    return requests, consumed
+
+
 def parse(query: str, registry: Registry) -> ParsedQuery:
     result = ParsedQuery()
 
-    result.source = _match_source(query, registry)
-    if result.source is None:
+    result.requests, consumed = _match_requests(query, registry)
+    if not result.requests:
         names = ", ".join(s.display_name for s in registry.sources.values()) or "none installed"
         result.errors.append(f"No data source recognised. Available: {names}.")
         return result
+    result.source = result.requests[0].source
+    result.extras = result.requests[0].extras
 
-    src = registry.get(result.source)
-    result.extras, consumed = src.parse_extras(query)
     matched = [
-        kw for kw in src.keywords if re.search(rf"\b{re.escape(kw)}\b", query.lower())
+        kw
+        for req in result.requests
+        for kw in registry.get(req.source).keywords
+        if re.search(rf"\b{re.escape(kw)}\b", query.lower())
     ] + consumed
     tr = _extract_time(query, matched)
     if tr is None:

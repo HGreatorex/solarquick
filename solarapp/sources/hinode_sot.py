@@ -81,9 +81,9 @@ class HinodeSot(DataSource):
         }
 
     def _render(self, path: str) -> dict:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        # matplotlib.image.imsave (not pyplot: fetches may run in worker threads,
+        # and pyplot's global figure state is not thread-safe)
+        from matplotlib import image as mpimg
         from astropy.io import fits
 
         with fits.open(path) as h:
@@ -95,7 +95,7 @@ class HinodeSot(DataSource):
 
         lo, hi = np.nanpercentile(data, [1, 99.5])
         buf = io.BytesIO()
-        plt.imsave(buf, np.clip(data, lo, hi), cmap="gray", origin="lower", format="png")
+        mpimg.imsave(buf, np.clip(data, lo, hi), cmap="gray", origin="lower", format="png")
         uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
         t = datetime.fromisoformat(hdr.get("DATE_OBS", hdr.get("DATE-OBS")))

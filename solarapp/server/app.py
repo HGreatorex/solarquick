@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -36,13 +37,33 @@ def query(body: Query) -> JSONResponse:
     parsed = parse(body.q, reg)
     if not parsed.ok:
         return JSONResponse({"errors": parsed.errors}, status_code=422)
-    src = reg.get(parsed.source)
-    try:
-        spec = src.fetch(parsed.start, parsed.end, **parsed.extras)
-    except Exception as e:  # surfacing fetch problems to the UI beats a 500
-        return JSONResponse({"errors": [f"{src.display_name}: {e}"]}, status_code=502)
+
+    def run(req) -> tuple[dict | None, str | None]:
+        src = reg.get(req.source)
+        try:
+            return src.fetch(parsed.start, parsed.end, **req.extras), None
+        except Exception as e:  # surfacing fetch problems to the UI beats a 500
+            return None, f"{src.display_name}: {e}"
+
+    # sources are network-bound and independent — fetch them concurrently
+    with ThreadPoolExecutor(max_workers=min(4, len(parsed.requests))) as pool:
+        outcomes = list(pool.map(run, parsed.requests))
+    specs = [s for s, _ in outcomes if s is not None]
+    errors = [e for _, e in outcomes if e is not None]
+
+    if not specs:
+        return JSONResponse({"errors": errors}, status_code=502)
+
+    if len(parsed.requests) == 1:
+        spec = specs[0]
+    else:
+        spec = {"kind": "multi", "items": specs}
+        if errors:
+            spec["note"] = "Some sources failed — " + " · ".join(errors)
+
     spec["parsed"] = {
         "source": parsed.source,
+        "sources": [r.source for r in parsed.requests],
         "start": parsed.start.isoformat(),
         "end": parsed.end.isoformat(),
     }

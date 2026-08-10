@@ -77,7 +77,7 @@ class MySource(DataSource):
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
 ```
 
-**PlotSpec** (dict), four kinds:
+**PlotSpec** (dict), five kinds:
 - timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
   `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
   A series may use numeric `x` instead of `times` (spectra: irradiance vs nm).
@@ -88,6 +88,9 @@ class MySource(DataSource):
   `zlabel` — rendered as a Plotly heatmap (Wind/WAVES).
 - `kind: "panels"`: `panels: [spec...]` — stacked subplots (GOES EUVS
   channel groups, WAVES RAD2/RAD1).
+- `kind: "multi"`: `items: [spec...]` — one block per requested source
+  (server-assembled for multi-source queries), any of the kinds above;
+  optional `note` lists sources that failed.
 
 ## Caveats (read before extending)
 
@@ -125,13 +128,17 @@ class MySource(DataSource):
 - v1: GOES XRS quicklook, free-text query, single-day/range plots.
 - v2: SDO image quicklook (AIA + HMI via Helioviewer), per-source query
   options, image filmstrip UI.
-- v3/v4 (this build): SOHO EIT/LASCO, PROBA2 SWAP+LYRA, SolO EUI+STIX,
+- v3/v4: SOHO EIT/LASCO, PROBA2 SWAP+LYRA, SolO EUI+STIX,
   RHESSI, Fermi GBM, Wind/WAVES spectrograms, SDO EVE lines/spectra,
   GOES EUVS multi-panel, Hinode SOT; spectrogram/panels/spectrum plot kinds.
-- next: (1) multi-source overlay ("show GOES and STIX for..."), (2) synoptic
-  data (spacecraft/planet positions relative to the Sun), (3) Earth
-  illumination plots. Later: HEK event annotations, export (PNG/CSV),
-  optional LLM query layer, hosted deploy.
+- v5 (this build): multi-source queries — "goes xrs and aia 304 yesterday"
+  splits on conjunctions (date ranges masked first), one request per segment
+  (same source may repeat with different options), fetched concurrently,
+  rendered as stacked blocks; per-source failures reported without sinking
+  the rest.
+- next: (1) synoptic data (spacecraft/planet positions relative to the Sun),
+  (2) Earth illumination plots. Later: HEK event annotations, export
+  (PNG/CSV), optional LLM query layer, hosted deploy.
 
 ## Handoff notes (Fable → Opus continuation)
 

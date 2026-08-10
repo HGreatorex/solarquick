@@ -19,34 +19,26 @@
   #meta { color:#8b949e; font-size:.85rem; margin-top:.5rem; }
   #plot { width:100%; height:520px; }
   .hint { color:#8b949e; font-size:.85rem; }
-  #imgview { display:none; }
-  #imgview h2 { font-size:1rem; font-weight:600; text-align:center; margin:.5rem 0; }
-  #mainimg { display:block; max-width:640px; width:100%; margin:0 auto; border-radius:8px;
-             background:#161b22; cursor:zoom-in; }
-  #imgcap { text-align:center; color:#8b949e; font-size:.85rem; margin:.5rem 0; }
-  #thumbs { display:flex; gap:.4rem; justify-content:center; flex-wrap:wrap; margin:.5rem 0; }
-  #thumbs img { width:72px; height:72px; border-radius:6px; cursor:pointer;
-                border:2px solid transparent; background:#161b22; }
-  #thumbs img.sel { border-color:#f0a832; }
-  #note { color:#d29922; font-size:.85rem; text-align:center; margin:.5rem 0; }
+  .imgview h2 { font-size:1rem; font-weight:600; text-align:center; margin:.5rem 0; }
+  .imgview .mainimg { display:block; max-width:640px; width:100%; margin:0 auto;
+                      border-radius:8px; background:#161b22; cursor:zoom-in; }
+  .imgview .imgcap { text-align:center; color:#8b949e; font-size:.85rem; margin:.5rem 0; }
+  .imgview .thumbs { display:flex; gap:.4rem; justify-content:center; flex-wrap:wrap; margin:.5rem 0; }
+  .imgview .thumbs img { width:72px; height:72px; border-radius:6px; cursor:pointer;
+                         border:2px solid transparent; background:#161b22; }
+  .imgview .thumbs img.sel { border-color:#f0a832; }
+  .imgview .note { color:#d29922; font-size:.85rem; text-align:center; margin:.5rem 0; }
 </style>
 </head>
 <body>
 <h1>Solar<span>Quick</span></h1>
-<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 yesterday” · “lasco c3 2026-08-01” · “solar orbiter stix yesterday” · “wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “hinode sot 2013-11-15”</p>
+<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 and goes xrs yesterday” · “lasco c3 2026-08-01” · “stix and wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “hinode sot 2013-11-15”</p>
 <form id="f">
   <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
   <button id="go">Plot</button>
 </form>
 <div id="msg"></div>
 <div id="plot"></div>
-<div id="imgview">
-  <h2 id="imgtitle"></h2>
-  <img id="mainimg" alt="SDO image">
-  <div id="imgcap"></div>
-  <div id="thumbs"></div>
-  <div id="note"></div>
-</div>
 <div id="meta"></div>
 <script>
 const f = document.getElementById("f"), q = document.getElementById("q"),
@@ -69,7 +61,7 @@ f.addEventListener("submit", async (e) => {
   finally { go.disabled = false; go.textContent = "Plot"; }
 });
 
-const imgview = document.getElementById("imgview"), plotDiv = document.getElementById("plot");
+const plotDiv = document.getElementById("plot");
 
 const DARK = {
   paper_bgcolor: "#0d1117", plot_bgcolor: "#161b22", font: {color:"#e6edf3"},
@@ -77,21 +69,31 @@ const DARK = {
 
 function render(d) {
   plotDiv.innerHTML = "";
-  if (d.kind === "images") return renderImages(d);
-  imgview.style.display = "none"; plotDiv.style.display = "block";
-  const specs = d.kind === "panels" ? d.panels : [d];
   plotDiv.style.height = "auto";
-  let points = 0;
+  const items = d.kind === "multi" ? d.items : [d];
+  const stats = {points: 0, frames: 0, provenance: []};
+  items.forEach(item => renderItem(item, items.length > 1, stats));
+  const notes = [d.note, ...items.map(i => i.note)].filter(Boolean);
+  if (notes.length) { msg.textContent = notes.join("\n"); msg.style.color = "#d29922"; }
+  const bits = [];
+  if (stats.points) bits.push(`${stats.points} points`);
+  if (stats.frames) bits.push(`${stats.frames} frame(s)`);
+  meta.textContent = bits.join(" · ") + " · " + [...new Set(stats.provenance)].join(" · ");
+  if (!stats.points && !stats.frames)
+    msg.textContent = "Query understood, but no data in this interval (archive gap or future date?).";
+}
+
+function renderItem(item, compact, stats) {
+  if (item.provenance) stats.provenance.push(item.provenance);
+  if (item.kind === "images") { renderImages(item, stats); return; }
+  const specs = item.kind === "panels" ? item.panels : [item];
   specs.forEach(s => {
     const el = document.createElement("div");
-    el.style.height = specs.length > 1 ? "300px" : "520px";
+    el.style.height = (compact || specs.length > 1) ? "300px" : "520px";
     plotDiv.appendChild(el);
-    if (s.kind === "spectrogram") { plotSpectrogram(el, s); points += s.times.length * s.freqs.length; }
-    else { plotTimeseries(el, s, specs.length > 1); points += s.series.reduce((a,x)=>a+x.values.length, 0); }
+    if (s.kind === "spectrogram") { plotSpectrogram(el, s); stats.points += s.times.length * s.freqs.length; }
+    else { plotTimeseries(el, s, compact || specs.length > 1); stats.points += s.series.reduce((a,x)=>a+x.values.length, 0); }
   });
-  if (d.note) { msg.textContent = d.note; msg.style.color = "#d29922"; }
-  meta.textContent = `${points} points · ${d.provenance || ""}`;
-  if (points === 0) msg.textContent = "Query understood, but no data points in this interval (archive gap or future date?).";
 }
 
 function plotTimeseries(el, d, compact) {
@@ -133,14 +135,16 @@ function plotSpectrogram(el, d) {
   }, {responsive: true});
 }
 
-function renderImages(d) {
-  Plotly.purge("plot"); plotDiv.style.display = "none"; imgview.style.display = "block";
-  document.getElementById("imgtitle").textContent = d.title;
-  document.getElementById("note").textContent = d.note || "";
-  const main = document.getElementById("mainimg"), cap = document.getElementById("imgcap"),
-        thumbs = document.getElementById("thumbs");
-  thumbs.innerHTML = "";
-  if (!d.images.length) { msg.textContent = "No images found for this interval."; return; }
+function renderImages(d, stats) {
+  const box = document.createElement("div");
+  box.className = "imgview";
+  box.innerHTML = `<h2></h2><img class="mainimg" alt="solar image">
+    <div class="imgcap"></div><div class="thumbs"></div>`;
+  plotDiv.appendChild(box);
+  box.querySelector("h2").textContent = d.title;
+  const main = box.querySelector(".mainimg"), cap = box.querySelector(".imgcap"),
+        thumbs = box.querySelector(".thumbs");
+  if (!d.images.length) { cap.textContent = "No images found for this interval."; return; }
   const show = (i) => {
     main.src = d.images[i].url; cap.textContent = d.images[i].caption;
     main.onclick = () => window.open(d.images[i].url, "_blank");
@@ -153,7 +157,7 @@ function renderImages(d) {
     thumbs.appendChild(t);
   });
   show(0);
-  meta.textContent = `${d.images.length} frame(s) · ${d.provenance || ""}`;
+  stats.frames += d.images.length;
 }
 </script>
 </body>

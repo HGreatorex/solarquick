@@ -33,7 +33,9 @@ learns its keywords. See `ARCHITECTURE.md`.
 - [x] GOES EUVS lines + MgII, primary-satellite default, multi-panel
       ("euvs yesterday", "goes-16 euvs lyman alpha 2023-01-01")
 - [x] Hinode SOT filtergrams via VSO ("hinode sot 2013-11-15")
-- [ ] Multi-source overlay (one request, several datasets)
+- [x] Multi-source queries ("sdo aia 304 and goes xrs yesterday", "goes, stix
+      and lasco c2 for 2026-07-10") — concurrent fetch, stacked results
+
 - [ ] Synoptic data: spacecraft/planet positions relative to the Sun
 - [ ] Earth illumination plots
 - [ ] HEK event annotations

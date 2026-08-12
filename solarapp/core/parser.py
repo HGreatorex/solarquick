@@ -8,10 +8,18 @@ Two jobs:
 2. What time range?    ISO ranges, single dates ("10th of July 2026"),
                        relative words (today / yesterday). Day-first, UTC.
                        One time range applies to every requested source.
+
+Typos are handled by retry, not by loosening the matchers: a query that
+fails to parse is spell-corrected against the keyword + date-word vocabulary
+and parsed again, so "goess xsr yesterdy" works while exact matching stays
+strict. Corrections are reported in ParsedQuery.corrections — a science tool
+should never silently reinterpret what was asked for.
+
 No AI, no network, deterministic. An LLM layer can later wrap the same interface.
 """
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -49,14 +57,85 @@ class ParsedQuery:
     start: datetime | None = None
     end: datetime | None = None
     errors: list[str] = field(default_factory=list)
+    # spelling fixes applied to make the query parse: [(typed, used), ...]
+    corrections: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
         return not self.errors
 
+    @property
+    def correction_note(self) -> str:
+        if not self.corrections:
+            return ""
+        fixes = ", ".join(f"“{a}” → “{b}”" for a, b in self.corrections)
+        return f"Interpreted {fixes}."
+
 
 def _utc(dt: datetime) -> datetime:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+# -- typo tolerance ------------------------------------------------------
+
+# Words the parser understands beyond plugin keywords: dates, time grammar,
+# and the flare vocabulary. Included so date typos ("yesterdy", "januray")
+# are correctable too, and so real words are never "corrected" away.
+_GRAMMAR_WORDS = {
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "today", "yesterday", "tomorrow", "last", "past", "since", "between",
+    "from", "until", "through", "hour", "hours", "day", "days", "week",
+    "weeks", "month", "months", "year", "years",
+    "flare", "flares", "class", "biggest", "largest", "strongest", "powerful",
+    "above", "over", "show", "plot", "display", "give", "data", "please",
+    "quicklook", "position", "positions", "where", "spectrum", "spectra",
+}
+# Below this length, edit distance is not evidence: the instrument acronyms
+# are dense (sot/sdo, eve/eui/eit are one or two edits apart), so a typo'd
+# 3-letter token would confidently resolve to the wrong instrument.
+_FUZZY_MIN_LEN = 4
+# 0.80 admits single transpositions ("lasoc" -> "lasco"), which difflib scores
+# harshly; verified against the full example-query set to change none of them.
+_FUZZY_CUTOFF = 0.80
+
+
+def _vocabulary(registry: Registry) -> set[str]:
+    words = set(_GRAMMAR_WORDS)
+    for src in registry.sources.values():
+        for kw in src.keywords:
+            words.update(re.findall(r"[a-z]+", kw.lower()))
+    return words
+
+
+def _autocorrect(query: str, registry: Registry) -> tuple[str, list[tuple[str, str]]]:
+    """Spell-correct unknown alphabetic tokens against the parser vocabulary.
+
+    Only tokens that are not already understood are touched, so a valid query
+    is returned unchanged and cannot be corrupted. Three-letter tokens are
+    matched against the grammar words only ("lst" → "last"): those are not
+    acronym-dense, whereas correcting a short token against instrument names
+    could confidently turn it into the wrong instrument.
+    """
+    vocab = _vocabulary(registry)
+    corrections: list[tuple[str, str]] = []
+    out: list[str] = []
+    for piece in re.split(r"([^A-Za-z]+)", query):  # keep separators/numbers
+        low = piece.lower()
+        if piece.isalpha() and low not in vocab:
+            if len(piece) >= _FUZZY_MIN_LEN:
+                candidates = vocab
+            elif len(piece) == _FUZZY_MIN_LEN - 1:
+                candidates = _GRAMMAR_WORDS
+            else:
+                candidates = ()
+            near = difflib.get_close_matches(low, candidates, n=1, cutoff=_FUZZY_CUTOFF)
+            if near and near[0] != low:
+                corrections.append((piece, near[0]))
+                piece = near[0]
+        out.append(piece)
+    return "".join(out), corrections
 
 
 def _match_source(query: str, registry: Registry) -> str | None:
@@ -94,13 +173,27 @@ def _strip_keywords(q: str, matched_keywords: list[str]) -> str:
     return _NOISE.sub(" ", q)
 
 
+_YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+_MONTH_RE = re.compile(
+    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", re.I
+)
+
+
 def _span_by_precision(text: str) -> tuple[datetime, datetime] | None:
     """Fuzzy-parse text into a span whose width matches its precision.
 
     The text is parsed twice with different defaults; fields that follow the
     default were not in the text, revealing how specific it was:
     "10 july 2026" → that day, "july 2026" → that month, "2026" → that year.
+
+    A year or month name must actually appear: dateutil will read a bare "3"
+    (from e.g. a mistyped "lst 3 days") as a day-of-month against today's
+    year, which this function would then widen into a whole-year span — a
+    silently enormous request. Relative phrasings are handled by the callers
+    before this point, so requiring one is safe.
     """
+    if not (_YEAR_RE.search(text) or _MONTH_RE.search(text)):
+        return None
     base_year = datetime.now(timezone.utc).year
     d_lo = datetime(base_year, 1, 1)
     d_hi = datetime(base_year, 12, 28)
@@ -233,6 +326,31 @@ def _match_requests(query: str, registry: Registry) -> tuple[list[SourceRequest]
 
 
 def parse(query: str, registry: Registry) -> ParsedQuery:
+    """Parse a query, correcting unrecognised words first.
+
+    Correction runs before parsing rather than only after a failure, because
+    a typo usually *degrades* a parse instead of breaking it: "flares in
+    Januray 2025" would quietly widen to the whole year, "bigest flare since
+    2014" would return a 12-year list instead of the one biggest flare, and
+    "goes and terminater today" would silently drop the second source. Those
+    confident-but-wrong answers are worse than an error.
+
+    Corrections only ever replace tokens the parser could not understand at
+    all, so a valid query is parsed untouched; if the corrected query fails
+    to parse we fall back to the original's clearer error message.
+    """
+    corrected, corrections = _autocorrect(query, registry)
+    if not corrections:
+        return _parse_once(query, registry)
+
+    retry = _parse_once(corrected, registry)
+    if retry.ok:
+        retry.corrections = corrections
+        return retry
+    return _parse_once(query, registry)
+
+
+def _parse_once(query: str, registry: Registry) -> ParsedQuery:
     result = ParsedQuery()
 
     result.requests, consumed = _match_requests(query, registry)

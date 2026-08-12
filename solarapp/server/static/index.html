@@ -86,7 +86,9 @@ function render(d) {
   const markers = items.flatMap(i => i.kind === "events" ? (i.markers || []) : []);
   items.forEach(item => renderItem(item, items.length > 1, stats, markers));
   const notes = (d.kind === "multi" ? [d.note, ...items.map(i => i.note)] : [d.note]).filter(Boolean);
-  if (notes.length) { msg.textContent = notes.join("\n"); msg.style.color = "#d29922"; }
+  // the wrapper note already carries the spelling corrections (server-side),
+  // so d.note is the single source of truth for "what we read your query as"
+  if (notes.length) { msg.textContent = [...new Set(notes)].join("\n"); msg.style.color = "#d29922"; }
   const bits = [];
   if (stats.points) bits.push(`${stats.points} points`);
   if (stats.frames) bits.push(`${stats.frames} frame(s)`);

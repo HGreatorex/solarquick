@@ -137,6 +137,18 @@ ordinary multi-source request.
 - **sunpy caches downloads** in `~/sunpy/data` — repeat queries are fast, disk grows.
 - **Parser is keyword-based**: unknown phrasings fail gracefully with a "did you mean"
   message listing available sources. It is not (yet) an AI.
+- **Typos are fixed by retry, not looser matching.** `_autocorrect` rewrites
+  only tokens absent from the vocabulary (keyword words + date/grammar words),
+  then the query is parsed again; corrections are reported to the user via
+  `ParsedQuery.corrections`. Correction runs *before* parsing because a typo
+  usually degrades a parse rather than breaking it ("bigest flare since 2014"
+  would otherwise return a 12-year list instead of one flare). Tokens of 3
+  characters are only matched against grammar words — the instrument acronyms
+  are dense (sot/sdo, eve/eui/eit are 1–2 edits apart) and would resolve
+  confidently to the wrong instrument.
+- **A date must contain a year or month name** to reach the fuzzy span logic:
+  dateutil reads a bare "3" as a day-of-month, which the precision rules would
+  widen into a whole-year request.
 - **Satellite choice**: defaults to primary GOES; `a.goes.SatelliteNumber` can be
   exposed as a query option later ("goes-16 sxr ...").
 - **Helioviewer-backed images are browse products** (JPEG2000 → server-rendered

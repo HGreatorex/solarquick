@@ -46,5 +46,7 @@ learns its keywords. See `ARCHITECTURE.md`.
       flare site + STIX
 - [x] Crops: time-of-day ("goes xrs 2026-07-10 14:00 to 15:30", "yesterday at
       14:30") and spatial image crops around a target
-- [ ] Typo-tolerant / free-form query understanding
+- [x] Typo tolerance ("goess xsr yesterdy", "bigest flare sicne 2014") with the
+      interpretation always shown back to you
+- [ ] Free-form query understanding (optional LLM fallback)
 - [ ] Export (PNG/CSV), hosted deploy

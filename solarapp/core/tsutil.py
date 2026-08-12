@@ -110,8 +110,18 @@ def downsample_df(df, start: datetime, end: datetime, target_points: int = 3000)
 
     High-cadence sources (GBM 0.256 s, RHESSI 4 s) would otherwise ship
     millions of points to the browser. No-op when already coarse enough.
+
+    Records what it did in `df.attrs["sampling"]` so exports can state whether
+    the values are archive cadence or binned — a CSV that silently contained
+    4 s means where the archive has 0.256 s samples would be misleading.
     """
     if len(df) <= target_points:
+        df.attrs["sampling"] = "archive cadence, not resampled"
         return df
     bin_s = max(1, int((end - start).total_seconds() / target_points))
-    return df.resample(f"{bin_s}s").mean().dropna(how="all")
+    out = df.resample(f"{bin_s}s").mean().dropna(how="all")
+    # set after the resample: pandas does not reliably propagate .attrs
+    out.attrs["sampling"] = (
+        f"mean-resampled into {bin_s} s bins from {len(df)} archive samples"
+    )
+    return out

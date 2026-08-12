@@ -52,4 +52,8 @@ learns its keywords. See `ARCHITECTURE.md`.
       rules can't read ("the big x-ray blast during the halloween storms").
       Install with `pip install -e '.[llm]'` and set `ANTHROPIC_API_KEY`; without
       a key the app is unchanged. The rewrite it produces is always shown to you.
-- [ ] Export (PNG/CSV), hosted deploy
+- [x] Export: every result block gets **PNG**, **CSV** and **Data (JSON)**
+      buttons (image results get "Open frame" instead of CSV). CSVs carry the
+      query, provenance and — where the source bins high-cadence data — a note
+      saying so, so a file always states what it actually contains.
+- [ ] Hosted deploy

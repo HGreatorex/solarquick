@@ -4,10 +4,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from solarapp.core import events
+from solarapp.core import events, export
 from solarapp.core.parser import parse
 from solarapp.core.registry import get_registry
 
@@ -17,6 +17,12 @@ STATIC = Path(__file__).parent / "static"
 
 class Query(BaseModel):
     q: str
+
+
+class ExportRequest(BaseModel):
+    spec: dict          # the block the browser is already displaying
+    format: str = "csv"  # "csv" | "json"
+    query: str | None = None
 
 
 @app.get("/")
@@ -79,3 +85,42 @@ def query(body: Query) -> JSONResponse:
         "rewritten": parsed.rewritten,
     }
     return JSONResponse(spec)
+
+
+@app.post("/api/export")
+def export_data(body: ExportRequest) -> Response:
+    """Convert a spec the browser already holds into a download.
+
+    Deliberately takes the spec rather than re-running the query: the file is
+    then exactly the numbers on screen, and the archives aren't fetched twice.
+    """
+    fmt = body.format.lower()
+    if fmt not in ("csv", "json"):
+        return JSONResponse({"errors": [f"Unsupported export format: {fmt}"]},
+                            status_code=400)
+    try:
+        if fmt == "json":
+            import json
+            payload = json.dumps(
+                {"query": body.query, **body.spec}, indent=2, allow_nan=False,
+            )
+            media = "application/json"
+        else:
+            payload = export.spec_to_csv(body.spec, body.query)
+            media = "text/csv"
+    except export.NotExportable as e:
+        return JSONResponse({"errors": [str(e)]}, status_code=422)
+    except (ValueError, TypeError, AttributeError, KeyError, IndexError) as e:
+        # the spec is client-supplied, so a structural mismatch is a bad
+        # request, not a server fault — never let it surface as a 500
+        return JSONResponse(
+            {"errors": [f"Could not export this result: {type(e).__name__}: {e}"]},
+            status_code=422,
+        )
+
+    name = export.filename(body.spec, fmt)
+    return Response(
+        content=payload,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )

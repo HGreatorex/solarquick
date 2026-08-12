@@ -77,6 +77,17 @@ class MySource(DataSource):
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
 ```
 
+**Export** (`core/export.py`, `POST /api/export`) turns one PlotSpec block into
+a CSV or JSON download. The browser posts back the spec it is already
+displaying rather than the server re-running the query — the file is then
+guaranteed to be the same numbers as the figure, and slow archives aren't
+fetched twice. Each kind has its own tabular shape (timeseries align every
+series onto one time column; spectrograms are a frequency × time matrix; events,
+positions and earthmap have their own columns); images have no tabular form and
+are refused with a pointer to the frame button. PNG is produced client-side by
+Plotly so it captures the rendered figure. Every CSV carries a commented header
+with the title, the query, the provenance, and the sampling disclosure below.
+
 **Event expansion** (`core/events.py`) runs between parse and fetch. If the
 query names a flare superlative ("biggest flare since 2014") or a pinpoint
 ("flare at 2017-09-06 12:02"), it resolves the flare against HEK, narrows
@@ -182,7 +193,12 @@ ordinary multi-source request.
 - **Fermi GBM is an all-sky monitor**: detector choice matters (default n5,
   override "gbm n3 ..."), solar pointing not guaranteed.
 - **High-cadence series are mean-downsampled** (~3000 points/series) before
-  hitting the browser (GBM 0.256 s, RHESSI 4 s, STIX 4 s).
+  hitting the browser (GBM 0.256 s, RHESSI 4 s, STIX 4 s). **A CSV export is
+  therefore not always archive resolution** — `downsample_df` records what it
+  did in `df.attrs["sampling"]`, the source copies that into the spec, and the
+  export writes it into the header. A file that looked like raw instrument data
+  but silently contained binned means would be worse than no export, so any new
+  downsampling source must thread that field through too.
 - **Wind/WAVES intensity** is 10·log10(PSD/daily-background) — the standard
   quicklook normalisation, not absolute flux.
 
@@ -219,13 +235,16 @@ ordinary multi-source request.
   `parse()` interface — exact keyword/date rules, then typo correction, then an
   optional Claude rewrite. Each layer reports what it did; none of them can
   widen what the app fetches.
-- next: export (PNG/CSV), hosted deploy.
+- v10 (this build): export — per-block PNG / CSV / JSON download buttons, with
+  provenance, the originating query, and sampling disclosure in every CSV
+  header (see "Export").
+- next: hosted deploy.
 
 ## Handoff notes
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (160, all offline — external APIs are never
+template. Tests: `pytest tests/` (193, all offline — external APIs are never
 called from the suite).
 
 **Verify external APIs live before writing a plugin.** Several archives have

@@ -50,5 +50,6 @@ class Proba2Lyra(DataSource):
             "series": series,
             "yaxis": {"label": "Irradiance (W m⁻²)", "type": "log"},
             "xaxis": {"label": "Time (UT)"},
+            "sampling": df.attrs.get("sampling"),
             "provenance": "PROBA2 LYRA level 3 via sunpy/Fido",
         }

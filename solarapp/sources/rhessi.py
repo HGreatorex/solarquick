@@ -40,5 +40,6 @@ class Rhessi(DataSource):
             "series": series,
             "yaxis": {"label": "Corrected count rate (s⁻¹ det⁻¹)", "type": "log"},
             "xaxis": {"label": "Time (UT)"},
+            "sampling": df.attrs.get("sampling"),
             "provenance": "RHESSI observing summary via sunpy/Fido",
         }

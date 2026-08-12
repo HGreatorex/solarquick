@@ -51,6 +51,7 @@ class FermiGbm(DataSource):
             "series": series,
             "yaxis": {"label": "Count rate (s⁻¹)", "type": "log"},
             "xaxis": {"label": "Time (UT)"},
+            "sampling": df.attrs.get("sampling"),
             "provenance": f"Fermi GBM CTIME, detector {detector}, via sunpy/Fido "
                           "(all-sky monitor — solar pointing not guaranteed)",
         }

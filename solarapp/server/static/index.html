@@ -38,6 +38,14 @@
   .events tr.sel { background:#1c2128; outline:1px solid #f0a832; }
   .events td:first-child { color:#f0a832; font-weight:600; }
   .evhint { color:#8b949e; font-size:.8rem; text-align:center; margin:.4rem 0 1rem; }
+  .dl { display:flex; gap:.4rem; justify-content:flex-end; align-items:center;
+        margin:.1rem 0 1.2rem; }
+  .dl button { padding:.3rem .7rem; font-size:.78rem; font-weight:500;
+               border-radius:6px; border:1px solid #30363d; background:#161b22;
+               color:#8b949e; cursor:pointer; }
+  .dl button:hover:not(:disabled) { color:#e6edf3; border-color:#8b949e; }
+  .dl button:disabled { opacity:.45; cursor:default; }
+  .dl .dlerr { color:#d29922; font-size:.78rem; margin-right:auto; }
 </style>
 </head>
 <body>
@@ -55,10 +63,12 @@ const f = document.getElementById("f"), q = document.getElementById("q"),
       go = document.getElementById("go"), msg = document.getElementById("msg"),
       meta = document.getElementById("meta");
 
+let currentQuery = "";  // recorded in export headers so a file says what made it
+
 f.addEventListener("submit", async (e) => {
   e.preventDefault();
   msg.textContent = ""; meta.textContent = ""; go.disabled = true; go.textContent = "Fetching…";
-  msg.style.color = "";
+  msg.style.color = ""; currentQuery = q.value;
   try {
     const r = await fetch("/api/query", {
       method: "POST", headers: {"Content-Type": "application/json"},
@@ -102,16 +112,84 @@ function renderItem(item, compact, stats, markers) {
   if (item.kind === "images") { renderImages(item, stats); return; }
   if (item.kind === "events") { renderEvents(item, stats); return; }
   const specs = item.kind === "panels" ? item.panels : [item];
+  const plots = [];
   specs.forEach(s => {
     const el = document.createElement("div");
     el.style.height = s.kind === "positions" ? "560px"
                     : (compact || specs.length > 1) ? "300px" : "520px";
     plotDiv.appendChild(el);
+    plots.push(el);
     if (s.kind === "spectrogram") { plotSpectrogram(el, s); stats.points += s.times.length * s.freqs.length; }
     else if (s.kind === "positions") { plotPositions(el, s); stats.points += s.bodies.length; }
     else if (s.kind === "earthmap") { plotEarthmap(el, s); stats.points += 1; }
     else { plotTimeseries(el, s, compact || specs.length > 1, markers); stats.points += s.series.reduce((a,x)=>a+x.values.length, 0); }
   });
+  downloadBar(item, {plots});
+}
+
+// -- downloads ---------------------------------------------------------
+// CSV/JSON go through the server so the file is generated from the same spec
+// the figure was drawn from; PNG is rendered client-side by Plotly.
+
+function downloadBar(item, {plots = [], frameUrl = null} = {}) {
+  const bar = document.createElement("div");
+  bar.className = "dl";
+  const err = document.createElement("span");
+  err.className = "dlerr";
+  bar.appendChild(err);
+
+  const add = (label, title, handler) => {
+    const b = document.createElement("button");
+    b.textContent = label; b.title = title;
+    b.addEventListener("click", async () => {
+      err.textContent = ""; b.disabled = true;
+      const was = b.textContent; b.textContent = "…";
+      try { await handler(); } catch (e) { err.textContent = String(e.message || e); }
+      finally { b.disabled = false; b.textContent = was; }
+    });
+    bar.appendChild(b);
+    return b;
+  };
+
+  if (plots.length) {
+    add("PNG", "Save the figure as a PNG image", async () => {
+      const base = (item.title || "figure").replace(/[^\w.-]+/g, "_").slice(0, 60);
+      for (const [i, el] of plots.entries()) {
+        await Plotly.downloadImage(el, {
+          format: "png", scale: 2, width: el.clientWidth, height: el.clientHeight,
+          filename: plots.length > 1 ? `${base}_panel${i + 1}` : base,
+        });
+      }
+    });
+  }
+  if (frameUrl) {
+    add("Open frame ↗", "Open this frame at full size in a new tab",
+        async () => { window.open(frameUrl(), "_blank"); });
+  }
+  if (item.kind !== "images") {
+    add("CSV", "Download the plotted values as CSV", () => serverDownload(item, "csv"));
+  }
+  add("Data (JSON)", "Download this result with its metadata as JSON",
+      () => serverDownload(item, "json"));
+  plotDiv.appendChild(bar);
+}
+
+async function serverDownload(spec, format) {
+  const r = await fetch("/api/export", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({spec, format, query: currentQuery}),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error((d.errors || ["Export failed"])[0]);
+  }
+  const blob = await r.blob();
+  const name = (r.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name ? name[1] : `solarquick.${format}`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
 }
 
 function renderEvents(d, stats) {
@@ -135,6 +213,7 @@ function renderEvents(d, stats) {
     q.value = tr.dataset.q; f.requestSubmit();
   }));
   stats.points += (d.events || []).length;
+  if ((d.events || []).length) downloadBar(d);
 }
 
 function plotTimeseries(el, d, compact, markers) {
@@ -279,6 +358,7 @@ function renderImages(d, stats) {
   });
   show(0);
   stats.frames += d.images.length;
+  downloadBar(d, {frameUrl: () => main.src});
 }
 </script>
 </body>

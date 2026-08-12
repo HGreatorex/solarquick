@@ -47,6 +47,12 @@ class HelioviewerImageSource(DataSource):
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         channel = self.channels[extras.get("channel", self.default_channel)]
+        # spatial crop: center (arcsec from disk center) + field of view (arcsec)
+        crop = None
+        if "fov" in extras:
+            crop = (float(extras.get("center_x", 0.0)),
+                    float(extras.get("center_y", 0.0)),
+                    float(extras["fov"]))
         frames, seen_ids, max_gap_h = [], set(), 0.0
 
         for t in sample_times(start, end):
@@ -57,13 +63,16 @@ class HelioviewerImageSource(DataSource):
             max_gap_h = max(max_gap_h, abs((actual - t).total_seconds()) / 3600)
             frames.append({
                 "time": actual.isoformat() + "+00:00",
-                "url": self._screenshot_url(actual, channel),
+                "url": self._screenshot_url(actual, channel, crop),
                 "caption": f"{channel['label']}  {actual:%Y-%m-%d %H:%M:%S} UT",
             })
 
+        title = f"{channel['label']}  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT"
+        if crop:
+            title += f"  ·  {crop[2]:.0f}″ crop at ({crop[0]:.0f}″, {crop[1]:.0f}″)"
         spec: PlotSpec = {
             "kind": "images",
-            "title": f"{channel['label']}  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT",
+            "title": title,
             "images": frames,
             "provenance": "Helioviewer.org (JPEG2000 browse images — quicklook, not science data)",
         }
@@ -94,10 +103,18 @@ class HelioviewerImageSource(DataSource):
         except (requests.RequestException, KeyError, ValueError):
             return t, None
 
-    def _screenshot_url(self, t: datetime, channel: dict) -> str:
+    def _screenshot_url(self, t: datetime, channel: dict, crop: tuple | None = None) -> str:
+        if crop:
+            cx, cy, fov = crop
+            # crop centers arrive as helioprojective (north-positive) arcsec;
+            # Helioviewer's y0 is image-space (south-positive), hence the flip
+            x0, y0 = cx, -cy
+            scale = fov / IMAGE_PX
+        else:
+            x0, y0, scale = 0.0, 0.0, channel["scale"]
         return (
             f"{HV}/takeScreenshot/?date={t:%Y-%m-%dT%H:%M:%SZ}"
-            f"&imageScale={channel['scale']}&layers={channel['layer']}"
-            f"&x0=0&y0=0&width={IMAGE_PX}&height={IMAGE_PX}"
+            f"&imageScale={scale}&layers={channel['layer']}"
+            f"&x0={x0:.1f}&y0={y0:.1f}&width={IMAGE_PX}&height={IMAGE_PX}"
             "&display=true&watermark=false"
         )

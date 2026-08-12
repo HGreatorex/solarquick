@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from solarapp.core import events
 from solarapp.core.parser import parse
 from solarapp.core.registry import get_registry
 
@@ -37,6 +38,11 @@ def query(body: Query) -> JSONResponse:
     parsed = parse(body.q, reg)
     if not parsed.ok:
         return JSONResponse({"errors": parsed.errors}, status_code=422)
+
+    try:  # event queries ("biggest flare since 2014") resolve against HEK here
+        events.expand(parsed)
+    except RuntimeError as e:
+        return JSONResponse({"errors": [str(e)]}, status_code=422)
 
     def run(req) -> tuple[dict | None, str | None]:
         src = reg.get(req.source)

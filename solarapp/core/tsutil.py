@@ -17,6 +17,67 @@ def check_mission_span(start: datetime, end: datetime, span_start: str,
             raise RuntimeError(f"{mission} stopped observing on {span_end}.")
 
 
+def pick_satellite(query):
+    """Narrow a Fido GOES result to one satellite (the highest number).
+
+    Several GOES spacecraft operate at once, so a pre-GOES-16 search returns
+    a row per satellite (2003 gives GOES-10 and GOES-12). Concatenating them
+    would interleave two instruments' curves into one series — duplicate
+    timestamps and a visibly doubled light curve. The highest number is the
+    newest instrument, which is also the usual primary.
+    """
+    table = next((t for t in query if len(t)), None)
+    if table is None or "SatelliteNumber" not in table.colnames or len(table) < 2:
+        return query
+    best = max(int(row["SatelliteNumber"]) for row in table)
+    return table[[i for i, row in enumerate(table)
+                  if int(row["SatelliteNumber"]) == best]]
+
+
+def fetch_files(query, mission: str, retries: int = 3) -> list[str]:
+    """Fido.fetch with retry-on-error and a readable failure.
+
+    Archives 503 intermittently (NCEI especially, more so under the
+    concurrent fetches a multi-source request makes) — measured roughly one
+    failure in three on the 2003 XRS files. parfive collects those in
+    Results.errors and re-fetching a Results retries only the failures.
+    Without this guard an all-failed download hands sunpy an empty file list,
+    which surfaces as the useless "pop from empty list".
+
+    max_splits=1 disables multi-part downloading: these files are tens of KB,
+    so splitting them buys nothing and every extra part is another chance for
+    a flaky archive to fail the whole download (MultiPartDownloadError).
+    """
+    from sunpy.net import Fido
+
+    files = Fido.fetch(query, max_splits=1)
+    for _ in range(retries):
+        if not getattr(files, "errors", None):
+            break
+        files = Fido.fetch(files, max_splits=1)
+    if not files:
+        detail = ""
+        errors = getattr(files, "errors", None)
+        if errors:
+            detail = f" ({len(errors)} download(s) failed: {_error_hint(errors[0])})"
+        raise RuntimeError(
+            f"{mission}: the archive listed files for this interval but none "
+            f"could be downloaded{detail}. This is usually a transient archive "
+            f"outage — try again shortly."
+        )
+    return files
+
+
+def _error_hint(error) -> str:
+    """Short human-readable cause from a parfive error tuple/object."""
+    response = getattr(error, "response", None)
+    status = getattr(response, "status", None)
+    if status:
+        return f"HTTP {status}"
+    exc = getattr(error, "exception", None)
+    return type(exc).__name__ if exc is not None else "unknown cause"
+
+
 def df_to_series(df, columns: dict[str, str], positive_only: bool = True) -> list[dict]:
     """Convert dataframe columns to PlotSpec series.
 

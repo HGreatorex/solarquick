@@ -28,11 +28,21 @@
                          border:2px solid transparent; background:#161b22; }
   .imgview .thumbs img.sel { border-color:#f0a832; }
   .imgview .note { color:#d29922; font-size:.85rem; text-align:center; margin:.5rem 0; }
+  .events h2 { font-size:1rem; font-weight:600; text-align:center; margin:.8rem 0 .4rem; }
+  .events table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  .events th, .events td { padding:.35rem .6rem; text-align:left;
+                           border-bottom:1px solid #21262d; }
+  .events th { color:#8b949e; font-weight:600; }
+  .events tbody tr { cursor:pointer; }
+  .events tbody tr:hover { background:#161b22; }
+  .events tr.sel { background:#1c2128; outline:1px solid #f0a832; }
+  .events td:first-child { color:#f0a832; font-weight:600; }
+  .evhint { color:#8b949e; font-size:.8rem; text-align:center; margin:.4rem 0 1rem; }
 </style>
 </head>
 <body>
 <h1>Solar<span>Quick</span></h1>
-<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 and goes xrs yesterday” · “lasco c3 2026-08-01” · “stix and wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “positions today” · “where is psp from 2026-06-01 to 2026-08-01” · “terminator today”</p>
+<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 and goes xrs yesterday” · “lasco c3 2026-08-01” · “stix and wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “positions today” · “terminator today” · “flares yesterday” · “biggest flare since 2014” · “x-class flares in july 2026”</p>
 <form id="f">
   <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
   <button id="go">Plot</button>
@@ -72,7 +82,9 @@ function render(d) {
   plotDiv.style.height = "auto";
   const items = d.kind === "multi" ? d.items : [d];
   const stats = {points: 0, frames: 0, provenance: []};
-  items.forEach(item => renderItem(item, items.length > 1, stats));
+  // flare peaks from any events item annotate every timeseries in the result
+  const markers = items.flatMap(i => i.kind === "events" ? (i.markers || []) : []);
+  items.forEach(item => renderItem(item, items.length > 1, stats, markers));
   const notes = (d.kind === "multi" ? [d.note, ...items.map(i => i.note)] : [d.note]).filter(Boolean);
   if (notes.length) { msg.textContent = notes.join("\n"); msg.style.color = "#d29922"; }
   const bits = [];
@@ -83,9 +95,10 @@ function render(d) {
     msg.textContent = "Query understood, but no data in this interval (archive gap or future date?).";
 }
 
-function renderItem(item, compact, stats) {
+function renderItem(item, compact, stats, markers) {
   if (item.provenance) stats.provenance.push(item.provenance);
   if (item.kind === "images") { renderImages(item, stats); return; }
+  if (item.kind === "events") { renderEvents(item, stats); return; }
   const specs = item.kind === "panels" ? item.panels : [item];
   specs.forEach(s => {
     const el = document.createElement("div");
@@ -95,11 +108,34 @@ function renderItem(item, compact, stats) {
     if (s.kind === "spectrogram") { plotSpectrogram(el, s); stats.points += s.times.length * s.freqs.length; }
     else if (s.kind === "positions") { plotPositions(el, s); stats.points += s.bodies.length; }
     else if (s.kind === "earthmap") { plotEarthmap(el, s); stats.points += 1; }
-    else { plotTimeseries(el, s, compact || specs.length > 1); stats.points += s.series.reduce((a,x)=>a+x.values.length, 0); }
+    else { plotTimeseries(el, s, compact || specs.length > 1, markers); stats.points += s.series.reduce((a,x)=>a+x.values.length, 0); }
   });
 }
 
-function plotTimeseries(el, d, compact) {
+function renderEvents(d, stats) {
+  const box = document.createElement("div");
+  box.className = "events";
+  const rows = (d.events || []).map(ev => `
+    <tr class="${ev.selected ? "sel" : ""}" data-q="${ev.query}">
+      <td>${ev.class}</td>
+      <td>${ev.peak.slice(0, 16).replace("T", " ")}</td>
+      <td>${ev.start.slice(11, 16)}–${ev.end.slice(11, 16)}</td>
+      <td>${ev.ar ? "AR " + ev.ar : ""}</td>
+      <td>${ev.x !== null ? `(${ev.x}″, ${ev.y}″)` : ""}</td>
+    </tr>`).join("");
+  box.innerHTML = `<h2>${d.title}</h2>` + (rows
+    ? `<table><thead><tr><th>Class</th><th>Peak (UT)</th><th>Start–End</th>
+       <th>Region</th><th>Position</th></tr></thead><tbody>${rows}</tbody></table>
+       <div class="evhint">Click a flare to open its event view.</div>`
+    : "");
+  plotDiv.appendChild(box);
+  box.querySelectorAll("tr[data-q]").forEach(tr => tr.addEventListener("click", () => {
+    q.value = tr.dataset.q; f.requestSubmit();
+  }));
+  stats.points += (d.events || []).length;
+}
+
+function plotTimeseries(el, d, compact, markers) {
   const traces = d.series.map(s => ({
     x: s.times || s.x, y: s.values, name: s.name, mode: "lines", line: {width: 1.5}
   }));
@@ -110,6 +146,13 @@ function plotTimeseries(el, d, compact) {
     annotations.push({xref:"paper", x:1.005, xanchor:"left", yref:"y",
       y: Math.log10(Math.sqrt(b.y0*b.y1)), text:b.label, showarrow:false,
       font:{color:"#8b949e", size:11}});
+  });
+  const isTimeAxis = d.series.some(s => s.times);
+  if (isTimeAxis) (markers || []).forEach(mk => {
+    shapes.push({type:"line", x0:mk.t, x1:mk.t, xref:"x", yref:"paper", y0:0, y1:1,
+      line:{color:"#e2604d", width:1, dash:"dot"}});
+    annotations.push({x:mk.t, xref:"x", yref:"paper", y:1.02, text:mk.label,
+      showarrow:false, font:{color:"#e2604d", size:10}});
   });
   Plotly.newPlot(el, traces, {
     ...DARK,

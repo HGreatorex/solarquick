@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from solarapp.core.registry import DataSource, PlotSpec
+from solarapp.core.tsutil import fetch_files, pick_satellite
 
 SWPC_7DAY = "https://services.swpc.noaa.gov/json/goes/primary/xrays-7-day.json"
 
@@ -81,7 +82,7 @@ class GoesXRS(DataSource):
                 "Note: the science archive lags real time; very recent dates "
                 "are served from SWPC instead."
             )
-        files = Fido.fetch(q)
+        files = fetch_files(pick_satellite(q), "GOES XRS")
         tseries = ts.TimeSeries(files, concatenate=True)
         df = tseries.to_dataframe()
         df = df[(df.index >= start.replace(tzinfo=None)) & (df.index <= end.replace(tzinfo=None))]

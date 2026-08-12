@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from solarapp.core.registry import DataSource, PlotSpec
-from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df
+from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df, fetch_files
 
 CHANNELS = {
     "CHANNEL1": "Lyman-α 120–123 nm",
@@ -38,7 +38,7 @@ class Proba2Lyra(DataSource):
             raise RuntimeError("No LYRA level-3 files found for this interval.")
         # P2SA/VSO also answers this query but ignores the level filter and
         # serves lev1 engineering files — keep only true lev3 products.
-        files = [f for f in Fido.fetch(q) if "lev3" in f]
+        files = [f for f in fetch_files(q, "PROBA2 LYRA") if "lev3" in f]
         if not files:
             raise RuntimeError("No LYRA level-3 files could be downloaded for this interval.")
         tseries = ts.TimeSeries(files, concatenate=True)

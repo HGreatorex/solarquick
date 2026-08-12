@@ -22,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from solarapp.core.registry import DataSource, PlotSpec
-from solarapp.core.tsutil import check_mission_span
+from solarapp.core.tsutil import check_mission_span, fetch_files
 
 MAX_FRAMES = 4
 
@@ -59,10 +59,7 @@ class HinodeSot(DataSource):
 
         picks = sorted({fg[int(i * (len(fg) - 1) / max(1, MAX_FRAMES - 1))]
                         for i in range(min(MAX_FRAMES, len(fg)))})
-        files = Fido.fetch(table[picks])
-        if not files:
-            raise RuntimeError("VSO returned no downloadable SOT files for this interval.")
-
+        files = fetch_files(table[picks], "Hinode SOT")
         images = []
         for f in sorted(files):
             try:

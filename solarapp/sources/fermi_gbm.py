@@ -13,7 +13,7 @@ import re
 from datetime import datetime
 
 from solarapp.core.registry import DataSource, PlotSpec
-from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df
+from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df, fetch_files
 
 DEFAULT_DETECTOR = "n5"
 
@@ -41,7 +41,7 @@ class FermiGbm(DataSource):
                         a.Resolution("ctime"), a.Detector(detector))
         if sum(len(r) for r in q) == 0:
             raise RuntimeError(f"No Fermi GBM CTIME files found for detector {detector}.")
-        files = Fido.fetch(q)
+        files = fetch_files(q, "Fermi GBM")
         tseries = ts.TimeSeries(files, concatenate=True)
         df = downsample_df(clip_df(tseries.to_dataframe(), start, end), start, end)
 

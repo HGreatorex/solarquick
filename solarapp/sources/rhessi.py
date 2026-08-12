@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from solarapp.core.registry import DataSource, PlotSpec
-from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df
+from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df, fetch_files
 
 
 class Rhessi(DataSource):
@@ -30,7 +30,7 @@ class Rhessi(DataSource):
                         a.Physobs("summary_lightcurve"))
         if sum(len(r) for r in q) == 0:
             raise RuntimeError("No RHESSI observing-summary files found for this interval.")
-        files = Fido.fetch(q)
+        files = fetch_files(q, "RHESSI")
         tseries = ts.TimeSeries(files, concatenate=True)
         df = downsample_df(clip_df(tseries.to_dataframe(), start, end), start, end)
 

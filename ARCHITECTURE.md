@@ -77,7 +77,16 @@ class MySource(DataSource):
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
 ```
 
-**PlotSpec** (dict), seven kinds:
+**Event expansion** (`core/events.py`) runs between parse and fetch. If the
+query names a flare superlative ("biggest flare since 2014") or a pinpoint
+("flare at 2017-09-06 12:02"), it resolves the flare against HEK, narrows
+the time range to its rise–decay window, and — unless the user named their
+own companions — appends the instruments worth seeing: GOES XRS, AIA 131+304
+cropped to the flare site, STIX if Solar Orbiter was flying, SOHO EIT
+instead of AIA for pre-2010 events. Everything downstream is just an
+ordinary multi-source request.
+
+**PlotSpec** (dict), eight kinds:
 - timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
   `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
   A series may use numeric `x` instead of `times` (spectra: irradiance vs nm).
@@ -91,6 +100,10 @@ class MySource(DataSource):
 - `kind: "multi"`: `items: [spec...]` — one block per requested source
   (server-assembled for multi-source queries), any of the kinds above;
   optional `note` lists sources that failed.
+- `kind: "events"`: `events: [{class, start, peak, end, x, y, ar, query,
+  selected}]` + `markers: [{t, label}]` — flare table (rows click through to
+  their event view via `query`); `markers` are lifted by the frontend and
+  drawn as dashed peak lines on *every* timeseries in the same result.
 - `kind: "positions"`: `bodies: [{name, type, color, x, y, r, lon_deg,
   trail?}]` — synoptic ecliptic-plane map (Sun at origin, Earth-Sun line
   fixed at 0°), equal-aspect scatter with orbit guides and motion trails.
@@ -101,6 +114,22 @@ class MySource(DataSource):
 
 ## Caveats (read before extending)
 
+- **HEK flare positions are unreliable**: the SWPC list often reports
+  `hpc_x = 0` when the location is unknown (with a plausible-looking non-zero
+  `hpc_y`), so `Flare.has_position` requires |x| > 1″ before cropping to a
+  site. Event views silently fall back to full-disk images.
+- **HEK is filtered to one provider** (`OBS.Observatory == "GOES"`, i.e. the
+  SWPC list). Dropping that filter returns the same flare several times from
+  different pipelines (SWPC, SSW Latest Events, ...) with slightly different
+  coordinates — dedupe before you widen it.
+- **"Biggest flare since <year>" searches class bands descending** (X → M →
+  C → B) rather than fetching everything and sorting: an unfiltered decade
+  query is tens of thousands of rows, while X-class since 2014 is ~130 rows
+  in ~20 s.
+- **Helioviewer crop y is south-positive**: `center_y` arrives as
+  helioprojective (north-positive) arcsec and is negated for the
+  `takeScreenshot` `y0` parameter. Verified against the 2017-09-06 X9.3
+  (AR 12673 at 515″, −232″) — the flip puts the saturated core centre-frame.
 - **NCEI archive latency**: GOES XRS science files appear on NOAA NCEI days after
   observation. The plugin uses SWPC's realtime 7-day JSON for recent times; there can
   be a gap (~7 days to ~2 weeks old) where neither has data yet.
@@ -138,22 +167,30 @@ class MySource(DataSource):
 - v3/v4: SOHO EIT/LASCO, PROBA2 SWAP+LYRA, SolO EUI+STIX,
   RHESSI, Fermi GBM, Wind/WAVES spectrograms, SDO EVE lines/spectra,
   GOES EUVS multi-panel, Hinode SOT; spectrogram/panels/spectrum plot kinds.
-- v5 (this build): multi-source queries — "goes xrs and aia 304 yesterday"
+- v5: multi-source queries — "goes xrs and aia 304 yesterday"
   splits on conjunctions (date ranges masked first), one request per segment
   (same source may repeat with different options), fetched concurrently,
   rendered as stacked blocks; per-source failures reported without sinking
   the rest.
-- v6 (this build): synoptic positions — inner planets (astropy ephemeris)
+- v6: synoptic positions — inner planets (astropy ephemeris)
   + PSP/SolO/STEREO-A/BepiColombo (JPL Horizons) on a Stonyhurst
   ecliptic-plane map; single epoch for ≤1-day queries, motion trails for
   ranges ("where is psp from 2026-06-01 to 2026-08-01").
-- v7 (this build): Earth illumination — terminator + civil/nautical/
+- v7: Earth illumination — terminator + civil/nautical/
   astronomical twilight bands and the subsolar point from astropy (sunrise
   equation on parallels); multi-day ranges add a fixed-UT daily subsolar
   track (free-running sampling would alias — the point circles the globe
   daily).
-- Later: HEK event annotations, export (PNG/CSV), optional LLM query
-  layer, hosted deploy.
+- v8 (this build): flare events — HEK/SWPC catalog source (`flares`), event
+  lists with click-through, peak markers auto-overlaid on any timeseries in
+  the same result, superlative/pinpoint queries auto-composing an event view
+  (see "Event expansion"); richer time grammar (last N days, "since 2014",
+  bare-year/month spans) and crops in both dimensions — time-of-day
+  ("14:00 to 15:30", "at 14:30") and spatial (Helioviewer `center_x/y` +
+  `fov`, used to frame the flare site).
+- next: typo-tolerant fuzzy keyword matching, then an optional
+  Claude-backed fallback parser for free-form phrasing (both behind the
+  existing `parse()` interface). Later: export (PNG/CSV), hosted deploy.
 
 ## Handoff notes (Fable → Opus continuation)
 

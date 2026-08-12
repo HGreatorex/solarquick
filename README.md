@@ -40,4 +40,11 @@ learns its keywords. See `ARCHITECTURE.md`.
       ("positions today", "where is psp from 2026-06-01 to 2026-08-01")
 - [x] Earth illumination: terminator + twilight bands + subsolar point/track
       ("terminator today", "day night map from 2026-06-01 to 2026-07-01")
-- [ ] HEK event annotations
+- [x] Flare events from HEK ("flares yesterday", "x-class flares in july 2026",
+      "biggest flare since 2014") — event tables, flare markers on timeseries,
+      and event views that auto-compose XRS + AIA 131/304 cropped to the
+      flare site + STIX
+- [x] Crops: time-of-day ("goes xrs 2026-07-10 14:00 to 15:30", "yesterday at
+      14:30") and spatial image crops around a target
+- [ ] Typo-tolerant / free-form query understanding
+- [ ] Export (PNG/CSV), hosted deploy

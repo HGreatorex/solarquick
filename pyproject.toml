@@ -22,6 +22,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# free-form query understanding; dormant unless ANTHROPIC_API_KEY is set
+llm = ["anthropic>=0.60"]
 
 [project.scripts]
 solarapp = "solarapp.__main__:main"

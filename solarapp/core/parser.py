@@ -59,6 +59,8 @@ class ParsedQuery:
     errors: list[str] = field(default_factory=list)
     # spelling fixes applied to make the query parse: [(typed, used), ...]
     corrections: list[tuple[str, str]] = field(default_factory=list)
+    # set when Claude restated the query: (canonical_query, one-line reading)
+    rewritten: tuple[str, str] | None = None
 
     @property
     def ok(self) -> bool:
@@ -66,10 +68,14 @@ class ParsedQuery:
 
     @property
     def correction_note(self) -> str:
-        if not self.corrections:
-            return ""
-        fixes = ", ".join(f"“{a}” → “{b}”" for a, b in self.corrections)
-        return f"Interpreted {fixes}."
+        notes = []
+        if self.corrections:
+            fixes = ", ".join(f"“{a}” → “{b}”" for a, b in self.corrections)
+            notes.append(f"Interpreted {fixes}.")
+        if self.rewritten:
+            canonical, reading = self.rewritten
+            notes.append(f"{reading} Read as: “{canonical}”.")
+        return " ".join(notes)
 
 
 def _utc(dt: datetime) -> datetime:
@@ -340,14 +346,42 @@ def parse(query: str, registry: Registry) -> ParsedQuery:
     to parse we fall back to the original's clearer error message.
     """
     corrected, corrections = _autocorrect(query, registry)
-    if not corrections:
-        return _parse_once(query, registry)
+    if corrections:
+        retry = _parse_once(corrected, registry)
+        if retry.ok:
+            retry.corrections = corrections
+            return retry
+    result = _parse_once(query, registry)
+    if result.ok:
+        return result
+    return _llm_fallback(query, registry, result)
 
-    retry = _parse_once(corrected, registry)
-    if retry.ok:
-        retry.corrections = corrections
-        return retry
-    return _parse_once(query, registry)
+
+def _llm_fallback(query: str, registry: Registry, failed: ParsedQuery) -> ParsedQuery:
+    """Last resort: have Claude restate the query, then parse that.
+
+    The rewrite goes through the same keyword parser as any other query, so a
+    hallucinated source simply fails to match — the model cannot widen what
+    SolarQuick will fetch. Returns the original failure if unavailable.
+    """
+    from . import llm_parser
+
+    if not llm_parser.enabled():
+        return failed
+    try:
+        canonical, reading, problem = llm_parser.rewrite(query, registry)
+    except Exception as e:  # never let the fallback turn into a worse error
+        failed.errors.append(f"(Interpretation via Claude was unavailable: {e}.)")
+        return failed
+
+    if not canonical:
+        return ParsedQuery(errors=[problem or failed.errors[0]])
+
+    result = _parse_once(canonical, registry)
+    if not result.ok:
+        return failed  # the rewrite didn't parse either; keep the clearer error
+    result.rewritten = (canonical, reading)
+    return result
 
 
 def _parse_once(query: str, registry: Registry) -> ParsedQuery:

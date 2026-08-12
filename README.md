@@ -48,5 +48,8 @@ learns its keywords. See `ARCHITECTURE.md`.
       14:30") and spatial image crops around a target
 - [x] Typo tolerance ("goess xsr yesterdy", "bigest flare sicne 2014") with the
       interpretation always shown back to you
-- [ ] Free-form query understanding (optional LLM fallback)
+- [x] Free-form query understanding — optional Claude fallback for phrasings the
+      rules can't read ("the big x-ray blast during the halloween storms").
+      Install with `pip install -e '.[llm]'` and set `ANTHROPIC_API_KEY`; without
+      a key the app is unchanged. The rewrite it produces is always shown to you.
 - [ ] Export (PNG/CSV), hosted deploy

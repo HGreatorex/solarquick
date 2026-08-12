@@ -34,7 +34,11 @@ RECEIVERS = [
 class WindWaves(DataSource):
     name = "wind_waves"
     display_name = "Wind/WAVES (radio spectra)"
-    keywords = ["waves", "wind waves", "wind", "radio spectrum", "radio spectra",
+    # deliberately no bare "wind": it matched "solar wind speed/density" and
+    # silently returned radio spectra for a plasma-velocity request. In solar
+    # physics "solar wind" is the plasma stream, not this spacecraft.
+    keywords = ["waves", "wind waves", "wind/waves", "wind spacecraft",
+                "radio spectrum", "radio spectra",
                 "type ii", "type iii", "radio burst"]
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:

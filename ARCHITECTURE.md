@@ -149,6 +149,21 @@ ordinary multi-source request.
 - **A date must contain a year or month name** to reach the fuzzy span logic:
   dateutil reads a bare "3" as a day-of-month, which the precision rules would
   widen into a whole-year request.
+- **The LLM fallback rewrites, it does not parse.** `core/llm_parser.py` asks
+  Claude to restate an unparseable query in canonical SolarQuick syntax, and
+  that string goes back through `_parse_once`. So every source's
+  `parse_extras()` is reused, and the model's output is only ever
+  keyword-matched — a hallucinated instrument or an injected instruction cannot
+  reach `fetch()` or widen what the app will retrieve, it just fails to match.
+  The rewrite is always shown to the user. Dormant unless `ANTHROPIC_API_KEY`
+  is set (`SOLARQUICK_LLM=0` forces off, `SOLARQUICK_LLM_MODEL` overrides the
+  model); it runs only after the deterministic and typo-correcting passes both
+  fail, so ordinary queries never pay for it.
+- **Bare instrument words can collide with physical quantities.** Wind/WAVES
+  used to claim the keyword `wind`, so "solar wind speed" silently returned
+  radio spectrograms — a different quantity entirely, with nothing to signal
+  the misread. Prefer `wind waves` / `wind spacecraft` over a bare mission word
+  whenever the word also names a phenomenon.
 - **Satellite choice**: defaults to primary GOES; `a.goes.SatelliteNumber` can be
   exposed as a query option later ("goes-16 sxr ...").
 - **Helioviewer-backed images are browse products** (JPEG2000 → server-rendered
@@ -193,19 +208,33 @@ ordinary multi-source request.
   equation on parallels); multi-day ranges add a fixed-UT daily subsolar
   track (free-running sampling would alias — the point circles the globe
   daily).
-- v8 (this build): flare events — HEK/SWPC catalog source (`flares`), event
+- v8: flare events — HEK/SWPC catalog source (`flares`), event
   lists with click-through, peak markers auto-overlaid on any timeseries in
   the same result, superlative/pinpoint queries auto-composing an event view
   (see "Event expansion"); richer time grammar (last N days, "since 2014",
   bare-year/month spans) and crops in both dimensions — time-of-day
   ("14:00 to 15:30", "at 14:30") and spatial (Helioviewer `center_x/y` +
   `fov`, used to frame the flare site).
-- next: typo-tolerant fuzzy keyword matching, then an optional
-  Claude-backed fallback parser for free-form phrasing (both behind the
-  existing `parse()` interface). Later: export (PNG/CSV), hosted deploy.
+- v9 (this build): smart query understanding, in three layers behind the same
+  `parse()` interface — exact keyword/date rules, then typo correction, then an
+  optional Claude rewrite. Each layer reports what it did; none of them can
+  widen what the app fetches.
+- next: export (PNG/CSV), hosted deploy.
 
-## Handoff notes (Fable → Opus continuation)
+## Handoff notes
 
-State at handoff is tracked in README "Status" section. To continue: read this file +
-`core/registry.py` + one existing source plugin; that is the whole mental model.
-Add sources by copying `goes_xrs.py` as a template. Tests: `pytest tests/`.
+To continue: read this file + `core/registry.py` + one existing source plugin;
+that is the whole mental model. Add sources by copying `goes_xrs.py` as a
+template. Tests: `pytest tests/` (160, all offline — external APIs are never
+called from the suite).
+
+**Verify external APIs live before writing a plugin.** Several archives have
+moved or lag: the Wind/WAVES `.R1` files are gone (use SPDF L2 CDFs), LASP's EVE
+`level2` tree stopped in 2018 (use `level2b`), and NCEI 503s intermittently
+under load. `curl` the endpoint and inspect a real file before coding against it.
+
+**Unverified:** the Claude fallback's live path. Its wiring, guardrails, and
+failure handling are covered by stubbed tests, but no request has been made
+against the real API from this machine — there was no `ANTHROPIC_API_KEY`, SDK
+install, or `ant` login available. Before relying on it: `pip install -e '.[llm]'`,
+export a key, and try "the big x-ray blast during the halloween storms".

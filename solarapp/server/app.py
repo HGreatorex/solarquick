@@ -67,7 +67,7 @@ def query(body: Query) -> JSONResponse:
         if errors:
             spec["note"] = "Some sources failed — " + " · ".join(errors)
 
-    if parsed.corrections:  # tell the user what we read, never silently guess
+    if parsed.correction_note:  # tell the user what we read, never silently guess
         spec["note"] = " ".join(filter(None, [parsed.correction_note, spec.get("note")]))
 
     spec["parsed"] = {
@@ -76,5 +76,6 @@ def query(body: Query) -> JSONResponse:
         "start": parsed.start.isoformat(),
         "end": parsed.end.isoformat(),
         "corrections": parsed.corrections,
+        "rewritten": parsed.rewritten,
     }
     return JSONResponse(spec)

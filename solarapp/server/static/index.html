@@ -359,14 +359,19 @@ function renderImages(d, stats) {
   const main = box.querySelector(".mainimg"), cap = box.querySelector(".imgcap"),
         thumbs = box.querySelector(".thumbs");
   if (!d.images.length) { cap.textContent = "No images found for this interval."; return; }
+  // Only the displayed frame is fetched at full resolution; the strip uses
+  // thumb_url (~20 KiB vs ~1 MiB), so opening a filmstrip no longer costs
+  // several MiB and many seconds of server-side rendering per query.
   const show = (i) => {
-    main.src = d.images[i].url; cap.textContent = d.images[i].caption;
-    main.onclick = () => window.open(d.images[i].url, "_blank");
+    const im = d.images[i];
+    main.src = im.url; cap.textContent = im.caption;
+    main.onclick = () => window.open(im.url, "_blank");
     [...thumbs.children].forEach((t, j) => t.classList.toggle("sel", j === i));
   };
   d.images.forEach((im, i) => {
     const t = document.createElement("img");
-    t.src = im.url; t.title = im.caption; t.loading = "lazy";
+    t.src = im.thumb_url || im.url;  // older specs carried only the full URL
+    t.title = im.caption; t.loading = "lazy";
     t.addEventListener("click", () => show(i));
     thumbs.appendChild(t);
   });

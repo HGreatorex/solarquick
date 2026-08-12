@@ -101,9 +101,11 @@ ordinary multi-source request.
 - timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
   `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
   A series may use numeric `x` instead of `times` (spectra: irradiance vs nm).
-- `kind: "images"`: `title`, `images: [{time, url, caption}]`, optional `note`.
-  Frontend shows a main image + clickable thumbnail filmstrip. `url` may be a
-  data URI (Hinode SOT renders FITS server-side).
+- `kind: "images"`: `title`, `images: [{time, url, thumb_url, caption}]`,
+  optional `note`. Frontend shows a main image + clickable thumbnail filmstrip;
+  the strip loads `thumb_url` (~20 KiB) and only the displayed frame is fetched
+  from `url` (~1 MiB). `url` may be a data URI (Hinode SOT renders FITS
+  server-side, and has no separate thumbnail).
 - `kind: "spectrogram"`: `times[]`, `freqs[]`, `z[freq][time]`, `zrange`,
   `zlabel` — rendered as a Plotly heatmap (Wind/WAVES).
 - `kind: "panels"`: `panels: [spec...]` — stacked subplots (GOES EUVS
@@ -180,7 +182,12 @@ ordinary multi-source request.
 - **Helioviewer-backed images are browse products** (JPEG2000 → server-rendered
   PNG): perfect for quicklook, not calibrated science data. The backend samples
   ≤8 times across the interval, resolves each to the nearest real image
-  (getClosestImage), dedupes, and the browser loads takeScreenshot URLs directly.
+  (getClosestImage, all in parallel — serially this was ~470 ms × 8), dedupes,
+  and the browser loads takeScreenshot URLs directly.
+- **A frame's `imageScale` must scale inversely with its pixel width** to hold
+  the field of view constant — otherwise a small render crops into the middle of
+  the disk instead of framing all of it. `_screenshot_url(..., px=)` derives it;
+  don't hardcode a scale for a new size.
   Ingestion lags real time by hours (EUI: weeks–months, SOAR releases);
   captions always show the true image time.
 - **Archive latencies**: LASP EVE ~2 days; NCEI EUVS ~1–2 weeks; SPDF WAVES L2

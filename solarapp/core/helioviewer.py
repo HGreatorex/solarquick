@@ -7,11 +7,19 @@ HelioviewerImageSource with a channel table — no download or rendering code.
 Per channel: {source_id, layer, label, scale}. `scale` is arcsec/pixel for the
 1024 px screenshot, chosen per instrument to frame its field of view (2.4 for
 AIA's full disk, 60 for LASCO C3's ±30 R_sun).
+
+Each frame is published at two sizes. The filmstrip showed eight 1 MiB
+full-resolution renders to fill eight 72 px thumbnails — ~8 MiB and ~20 s of
+Helioviewer render time per query. `thumb_url` is the same frame at THUMB_PX
+(~20 KiB), and the browser only loads `url` for the frame actually on display.
+Field of view is held constant by scaling arcsec/pixel inversely with the pixel
+width, so a thumbnail frames the same view rather than cropping into it.
 """
 from __future__ import annotations
 
 import math
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 import requests
@@ -20,7 +28,12 @@ from solarapp.core.registry import DataSource, PlotSpec
 
 HV = "https://api.helioviewer.org/v2"
 IMAGE_PX = 1024
+THUMB_PX = 128
 MAX_FRAMES = 8
+
+# one pooled connection per process: these calls are small, numerous and all to
+# the same host, so a fresh TLS handshake each time dominated their cost
+_session = requests.Session()
 
 
 def sample_times(start: datetime, end: datetime, max_frames: int = MAX_FRAMES) -> list[datetime]:
@@ -53,10 +66,19 @@ class HelioviewerImageSource(DataSource):
             crop = (float(extras.get("center_x", 0.0)),
                     float(extras.get("center_y", 0.0)),
                     float(extras["fov"]))
-        frames, seen_ids, max_gap_h = [], set(), 0.0
+        times = sample_times(start, end)
+        # independent metadata lookups: run together rather than paying ~470 ms
+        # of round trip each in series. Results are collected in request order
+        # so the dedupe below still sees frames chronologically.
+        if len(times) > 1:
+            with ThreadPoolExecutor(max_workers=len(times)) as pool:
+                resolved = list(pool.map(
+                    lambda t: self._closest_image(t, channel["source_id"]), times))
+        else:
+            resolved = [self._closest_image(times[0], channel["source_id"])]
 
-        for t in sample_times(start, end):
-            actual, img_id = self._closest_image(t, channel["source_id"])
+        frames, seen_ids, max_gap_h = [], set(), 0.0
+        for t, (actual, img_id) in zip(times, resolved):
             if img_id is not None and img_id in seen_ids:
                 continue  # data gap: same image matched two sample times
             seen_ids.add(img_id)
@@ -64,6 +86,7 @@ class HelioviewerImageSource(DataSource):
             frames.append({
                 "time": actual.isoformat() + "+00:00",
                 "url": self._screenshot_url(actual, channel, crop),
+                "thumb_url": self._screenshot_url(actual, channel, crop, px=THUMB_PX),
                 "caption": f"{channel['label']}  {actual:%Y-%m-%d %H:%M:%S} UT",
             })
 
@@ -92,7 +115,7 @@ class HelioviewerImageSource(DataSource):
         screenshot endpoint snaps to the nearest image on its own.
         """
         try:
-            r = requests.get(
+            r = _session.get(
                 f"{HV}/getClosestImage/",
                 params={"date": f"{t:%Y-%m-%dT%H:%M:%SZ}", "sourceId": source_id},
                 timeout=15,
@@ -103,7 +126,15 @@ class HelioviewerImageSource(DataSource):
         except (requests.RequestException, KeyError, ValueError):
             return t, None
 
-    def _screenshot_url(self, t: datetime, channel: dict, crop: tuple | None = None) -> str:
+    def _screenshot_url(self, t: datetime, channel: dict, crop: tuple | None = None,
+                        px: int = IMAGE_PX) -> str:
+        """Render URL for one frame at `px` square.
+
+        arcsec/pixel scales inversely with `px` so every size frames the same
+        field of view: a 128 px thumbnail shows the whole disk, not a crop of
+        its middle.
+        """
+        zoom = IMAGE_PX / px
         if crop:
             cx, cy, fov = crop
             # crop centers arrive as helioprojective (north-positive) arcsec;
@@ -114,7 +145,7 @@ class HelioviewerImageSource(DataSource):
             x0, y0, scale = 0.0, 0.0, channel["scale"]
         return (
             f"{HV}/takeScreenshot/?date={t:%Y-%m-%dT%H:%M:%SZ}"
-            f"&imageScale={scale}&layers={channel['layer']}"
-            f"&x0={x0:.1f}&y0={y0:.1f}&width={IMAGE_PX}&height={IMAGE_PX}"
+            f"&imageScale={scale * zoom:g}&layers={channel['layer']}"
+            f"&x0={x0:.1f}&y0={y0:.1f}&width={px}&height={px}"
             "&display=true&watermark=false"
         )

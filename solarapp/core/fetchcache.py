@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import requests
+from solarapp.core import httpclient
 
 CACHE_DIR = Path.home() / ".cache" / "solarapp"
 
@@ -17,7 +17,7 @@ def cached_download(url: str, name: str, timeout: int = 300) -> Path:
     path = CACHE_DIR / name
     if path.exists() and path.stat().st_size > 0:
         return path
-    r = requests.get(url, timeout=timeout)
+    r = httpclient.session().get(url, timeout=timeout)
     r.raise_for_status()
     tmp = path.with_suffix(path.suffix + ".part")
     tmp.write_bytes(r.content)
@@ -27,6 +27,6 @@ def cached_download(url: str, name: str, timeout: int = 300) -> Path:
 
 def listing(url: str, timeout: int = 60) -> str:
     """Fetch a directory-listing page (HTML) as text, for filename regexes."""
-    r = requests.get(url, timeout=timeout)
+    r = httpclient.session().get(url, timeout=timeout)
     r.raise_for_status()
     return r.text

@@ -12,8 +12,7 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 
-import requests
-
+from solarapp.core import httpclient
 from solarapp.core.registry import DataSource, PlotSpec
 from solarapp.core.tsutil import fetch_files, pick_satellite
 
@@ -57,7 +56,9 @@ class GoesXRS(DataSource):
     # -- backends ---------------------------------------------------------
 
     def _fetch_swpc(self, start: datetime, end: datetime) -> list[dict]:
-        rows = requests.get(SWPC_7DAY, timeout=30).json()
+        # one ~4.6 MB rolling feed serves every recent-GOES query, so it is
+        # briefly cached rather than re-downloaded per window
+        rows = httpclient.get_json_cached(SWPC_7DAY)
         out = {"0.05-0.4nm": {"t": [], "v": []}, "0.1-0.8nm": {"t": [], "v": []}}
         for r in rows:
             t = datetime.fromisoformat(r["time_tag"].replace("Z", "+00:00"))

@@ -88,6 +88,19 @@ are refused with a pointer to the frame button. PNG is produced client-side by
 Plotly so it captures the rendered figure. Every CSV carries a commented header
 with the title, the query, the provenance, and the sampling disclosure below.
 
+**Caching** happens at three levels, deliberately separate:
+- `core/resultcache.py` — fetched PlotSpecs, keyed on source + options +
+  concrete start/end. TTL is recency-aware: a window that ended over
+  `ARCHIVE_LAG_DAYS` ago is settled and caches for hours, while anything
+  reaching into the present expires in minutes because the archives are still
+  filling it. Failures are never cached. Hits are reported in the response
+  (`cached: [...]`) and `SOLARQUICK_CACHE=0` disables it.
+- `core/httpclient.py` — one pooled `requests.Session` for every source, plus a
+  short TTL cache for rolling feed URLs. That feed cache covers what the result
+  cache cannot: SWPC publishes one ~4.6 MB 7-day feed, so *different* windows
+  within that week previously re-downloaded all of it (1230 ms → 4 ms).
+- `core/fetchcache.py` and sunpy's own `~/sunpy/data` — downloaded archive files.
+
 **Event expansion** (`core/events.py`) runs between parse and fetch. If the
 query names a flare superlative ("biggest flare since 2014") or a pinpoint
 ("flare at 2017-09-06 12:02"), it resolves the flare against HEK, narrows
@@ -245,7 +258,13 @@ ordinary multi-source request.
 - v10 (this build): export — per-block PNG / CSV / JSON download buttons, with
   provenance, the originating query, and sampling disclosure in every CSV
   header (see "Export").
-- next: hosted deploy.
+- v1.1 (this build): performance. Per-source `timings` in every response;
+  filmstrip metadata resolved in parallel with thumbnail-sized frames; result
+  cache with recency-aware TTL; one pooled HTTP session plus a rolling-feed
+  cache; bounded parfive timeouts.
+- next: hosted deploy — but see the note in the handoff section: local install
+  is the recommended distribution route, and the LLM layer does not require
+  hosting.
 
 ## Handoff notes
 

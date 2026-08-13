@@ -24,6 +24,7 @@ from datetime import datetime
 
 import requests
 
+from solarapp.core import httpclient
 from solarapp.core.registry import DataSource, PlotSpec
 
 HV = "https://api.helioviewer.org/v2"
@@ -31,9 +32,8 @@ IMAGE_PX = 1024
 THUMB_PX = 128
 MAX_FRAMES = 8
 
-# one pooled connection per process: these calls are small, numerous and all to
-# the same host, so a fresh TLS handshake each time dominated their cost
-_session = requests.Session()
+# pooled connections live in core.httpclient — these calls are small, numerous
+# and all to one host, so a fresh TLS handshake each time dominated their cost
 
 
 def sample_times(start: datetime, end: datetime, max_frames: int = MAX_FRAMES) -> list[datetime]:
@@ -115,7 +115,7 @@ class HelioviewerImageSource(DataSource):
         screenshot endpoint snaps to the nearest image on its own.
         """
         try:
-            r = _session.get(
+            r = httpclient.session().get(
                 f"{HV}/getClosestImage/",
                 params={"date": f"{t:%Y-%m-%dT%H:%M:%SZ}", "sourceId": source_id},
                 timeout=15,

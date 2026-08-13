@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from solarapp.core import httpclient
 from solarapp.core.registry import DataSource, PlotSpec
 from solarapp.core.tsutil import check_mission_span
 
@@ -30,7 +31,7 @@ class SoloStix(DataSource):
         if end - start > timedelta(days=MAX_DAYS):
             raise RuntimeError(f"STIX quicklook requests are limited to {MAX_DAYS} days.")
 
-        r = requests.post(API, data={
+        r = httpclient.session().post(API, data={
             "begin": f"{start:%Y-%m-%dT%H:%M:%S}",
             "end": f"{end:%Y-%m-%dT%H:%M:%S}",
             "ltc": "true",

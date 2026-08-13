@@ -30,6 +30,7 @@ the options.
 - [Exporting data](#exporting-data)
 - [What this is and isn't](#what-this-is-and-isnt)
 - [Troubleshooting](#troubleshooting)
+- [Managing disk usage](#managing-disk-usage)
 - [Reporting problems](#reporting-problems)
 - [Adding a data source](#adding-a-data-source)
 
@@ -42,8 +43,10 @@ the options.
   package manager (`brew install python`, `sudo apt install python3 python3-venv`).
 - **Git**, to clone the repository (or download a ZIP from GitHub instead).
 - An internet connection — all data is fetched live from the archives.
-- About **1.5 GB of disk** for the Python packages, plus space for cached data
-  files as you use it (typically tens of MB).
+- About **400 MB of disk** for the Python packages, plus space for cached data
+  files. Be aware that the data cache **grows without limit** as you use the
+  app — heavy exploration across many dates and instruments can reach several
+  GB. See [Managing disk usage](#managing-disk-usage).
 
 ### About the Python packages
 
@@ -322,10 +325,28 @@ disable result caching if you want to be certain you're seeing a fresh fetch.
 `DELETE http://localhost:8000/api/cache` clears it, or restart with
 `SOLARQUICK_CACHE=0`.
 
+### Managing disk usage
+
+Downloaded archive files are cached so repeat queries are fast, and **nothing
+prunes them automatically**. Two locations:
+
+| Path | What's in it |
+|---|---|
+| `~/sunpy/data` | Files fetched via sunpy/Fido — GOES, RHESSI, Fermi GBM, LYRA, Hinode. This is the one that grows; it is shared with any other sunpy work on your machine. |
+| `~/.cache/solarapp` | Files SolarQuick downloads directly — Wind/WAVES, SDO EVE, GOES EUVS. |
+
+Check the size and clear them when you like — the app will simply re-download
+what it needs:
+
+```bash
+du -sh ~/sunpy/data ~/.cache/solarapp
+rm -rf ~/.cache/solarapp          # SolarQuick's own cache, safe to delete
+rm -rf ~/sunpy/data               # only if you don't use sunpy for other work
+```
+
 **Removing SolarQuick**
 Delete the `solarquick` folder. With a venv, that removes every installed
-package too. Cached data lives in `~/.cache/solarapp` and `~/sunpy` — delete
-those to reclaim the space.
+package too, then clear the cache directories above.
 
 ---
 

@@ -44,7 +44,8 @@ def find_port(host: str, port: int, tries: int = 20) -> int | None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="solarapp",
+        # no prog=: argparse then reports whichever entry point was actually
+        # invoked, rather than printing "solarapp" to someone who ran solarquick
         description="SolarQuick — a quicklook browser for solar physics data.",
     )
     parser.add_argument("--port", type=int,

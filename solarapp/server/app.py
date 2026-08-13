@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from solarapp.core import events, export
+from solarapp.core import events, export, resultcache
 from solarapp.core.parser import parse
 from solarapp.core.registry import get_registry
 
@@ -62,12 +62,24 @@ def query(body: Query) -> JSONResponse:
     if elapsed:  # only when an event query actually resolved something
         timings["resolve_event"] = elapsed
 
+    cache = resultcache.get_cache()
+    use_cache = resultcache.enabled()
+    cached: list[str] = []
+
     def run(req) -> tuple[dict | None, str | None, str, int]:
         src = reg.get(req.source)
         t = time.perf_counter()
+        key = resultcache.key_for(req.source, req.extras, parsed.start, parsed.end)
+        if use_cache:
+            hit = cache.get(key)
+            if hit is not None:
+                cached.append(req.source)
+                return hit, None, req.source, round((time.perf_counter() - t) * 1000)
         try:
             spec = src.fetch(parsed.start, parsed.end, **req.extras)
             err = None
+            if use_cache:  # only successes: a 503 must not become a cached outage
+                cache.put(key, spec, parsed.end)
         except Exception as e:  # surfacing fetch problems to the UI beats a 500
             spec, err = None, f"{src.display_name}: {e}"
         return spec, err, req.source, round((time.perf_counter() - t) * 1000)
@@ -97,6 +109,8 @@ def query(body: Query) -> JSONResponse:
     # is exactly what the concurrency is buying, so report both
     timings["total"] = round((time.perf_counter() - t_start) * 1000)
     spec["timings"] = timings
+    if cached:  # visible, so a surprising result can be checked against a fresh fetch
+        spec["cached"] = sorted(set(cached))
 
     spec["parsed"] = {
         "source": parsed.source,
@@ -107,6 +121,18 @@ def query(body: Query) -> JSONResponse:
         "rewritten": parsed.rewritten,
     }
     return JSONResponse(spec)
+
+
+@app.get("/api/cache")
+def cache_status() -> dict:
+    return {"enabled": resultcache.enabled(), **resultcache.get_cache().stats()}
+
+
+@app.delete("/api/cache")
+def cache_clear() -> dict:
+    """Drop everything — useful when checking whether a result is really fresh."""
+    resultcache.get_cache().clear()
+    return {"cleared": True, **resultcache.get_cache().stats()}
 
 
 @app.post("/api/export")

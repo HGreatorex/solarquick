@@ -102,7 +102,7 @@ function render(d) {
   const bits = [];
   if (stats.points) bits.push(`${stats.points} points`);
   if (stats.frames) bits.push(`${stats.frames} frame(s)`);
-  if (d.timings?.total) bits.push(timingLabel(d.timings));
+  if (d.timings?.total) bits.push(timingLabel(d.timings, d.cached));
   meta.textContent = bits.join(" · ") + " · " + [...new Set(stats.provenance)].join(" · ");
   if (!stats.points && !stats.frames)
     msg.textContent = "Query understood, but no data in this interval (archive gap or future date?).";
@@ -110,14 +110,17 @@ function render(d) {
 
 // "2.4 s (flares 1.9, goes_xrs 0.4)" — the per-source breakdown is what makes a
 // slow query diagnosable; hover shows every stage including parse and events
-function timingLabel(t) {
+function timingLabel(t, cached) {
   const secs = ms => (ms / 1000).toFixed(ms < 100 ? 2 : 1);
+  const hit = new Set(cached || []);
   const sources = Object.entries(t)
     .filter(([k]) => !["total", "parse", "resolve_event"].includes(k))
     .sort((a, b) => b[1] - a[1]);
-  const top = sources.slice(0, 3).map(([k, v]) => `${k} ${secs(v)}`).join(", ");
+  const top = sources.slice(0, 3)
+    .map(([k, v]) => `${k} ${secs(v)}${hit.has(k) ? " cached" : ""}`).join(", ");
   const label = `${secs(t.total)} s${top ? ` (${top})` : ""}`;
-  meta.title = Object.entries(t).map(([k, v]) => `${k}: ${v} ms`).join("\n");
+  meta.title = Object.entries(t).map(([k, v]) =>
+    `${k}: ${v} ms${hit.has(k) ? "  (from cache)" : ""}`).join("\n");
   return label;
 }
 

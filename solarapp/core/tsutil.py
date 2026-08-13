@@ -2,7 +2,27 @@
 from __future__ import annotations
 
 import math
+import os
 from datetime import datetime
+
+# parfive defaults to no total timeout and a 90 s socket read, so a stalled
+# archive connection hangs the whole request: an NCEI stall was measured at 82 s
+# before it even reported the 503, and the retries multiplied that. Bound both,
+# without overriding a value the operator set deliberately.
+os.environ.setdefault("PARFIVE_TOTAL_TIMEOUT", "120")
+os.environ.setdefault("PARFIVE_SOCK_READ_TIMEOUT", "30")
+
+
+# NOTE — a half-open search window does not work here, and the failure is silent.
+# Fido's a.Time is inclusive, so a one-day query ending at midnight also matches
+# the *next* day's file: every single-day archival query downloads two dailies to
+# use one instant of the second. Trimming the end by a microsecond looks like the
+# fix but sunpy's NCEI client then matches *nothing* — measured on 2017-09-06,
+# inclusive found 2 files and half-open found 0, so archival GOES would have
+# broken entirely rather than getting faster.
+# If this is worth revisiting, filter the search *results* (drop rows whose start
+# is >= end) rather than narrowing the query, and re-verify per client — each
+# archive's matching differs.
 
 
 def check_mission_span(start: datetime, end: datetime, span_start: str,

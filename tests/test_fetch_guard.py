@@ -145,3 +145,14 @@ def test_missing_column_passthrough():
         colnames = ["filename"]
     query = [NoColumn([{"filename": "a"}, {"filename": "b"}])]
     assert tsutil.pick_satellite(query) is query
+
+
+# -- search window -------------------------------------------------------
+
+def test_parfive_timeouts_are_bounded():
+    # parfive's defaults are "no total timeout" + 90 s socket read, which turned
+    # one stalled NCEI connection into a 185 s request
+    import os
+    import solarapp.core.tsutil  # noqa: F401  (sets the defaults on import)
+    assert 0 < int(os.environ["PARFIVE_TOTAL_TIMEOUT"]) <= 300
+    assert 0 < int(os.environ["PARFIVE_SOCK_READ_TIMEOUT"]) <= 60

@@ -3,9 +3,20 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "solarapp"
-version = "0.4.0"
-description = "Quicklook webapp for solar & ionospheric physics data (Solar Flare Finder successor)"
+name = "solarquick"
+version = "1.1.0b1"
+description = "Quicklook browser for solar physics data — type a plain-English request, get a plot"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Harry Greatorex" }]
+keywords = ["solar physics", "heliophysics", "quicklook", "sunpy", "GOES", "SDO"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Programming Language :: Python :: 3",
+]
 requires-python = ">=3.10"
 dependencies = [
     "sunpy[net,timeseries]>=5.0",
@@ -21,12 +32,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+# httpx is required by starlette's TestClient, which the export API tests use
+dev = ["pytest", "httpx"]
 # free-form query understanding; dormant unless ANTHROPIC_API_KEY is set
 llm = ["anthropic>=0.60"]
 
+[project.urls]
+Homepage = "https://github.com/HGreatorex/solarquick"
+Issues = "https://github.com/HGreatorex/solarquick/issues"
+
 [project.scripts]
-solarapp = "solarapp.__main__:main"
+solarquick = "solarapp.__main__:main"
+solarapp = "solarapp.__main__:main"  # kept so existing installs keep working
 
 [tool.setuptools.packages.find]
 include = ["solarapp*"]

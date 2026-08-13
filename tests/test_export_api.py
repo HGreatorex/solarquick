@@ -2,6 +2,10 @@
 must come back as a 4xx — never a 500."""
 import pytest
 
+# starlette's TestClient needs httpx, which importing the module does not check —
+# it raises at construction instead. Skip cleanly so `pytest tests` still passes
+# for someone who installed without the dev extra.
+pytest.importorskip("httpx", reason="install with '.[dev]' to run the API tests")
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
 from solarapp.server.app import app  # noqa: E402

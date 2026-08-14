@@ -62,7 +62,7 @@ solarapp/
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
 │       └── static/index.html← single-page UI: query box + progress + Plotly plot
-└── tests/                   ← 354, all offline
+└── tests/                   ← 389, all offline
 ```
 
 ## Request flow

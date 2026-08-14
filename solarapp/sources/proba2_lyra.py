@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from solarapp.core.registry import DataSource, PlotSpec
-from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df, fetch_files
+from solarapp.core.registry import DataSource, PlotSpec, Variable
+from solarapp.core.tsutil import clip_df, df_to_series, downsample_df, fetch_files
 
 CHANNELS = {
     "CHANNEL1": "Lyman-α 120–123 nm",
@@ -25,9 +25,24 @@ class Proba2Lyra(DataSource):
     name = "proba2_lyra"
     display_name = "PROBA2 LYRA (UV/EUV irradiance)"
     keywords = ["lyra", "proba2 lyra"]
+    coverage = ("2010-01-06", None)
+
+    # All four channels are plotted unless one is named.
+    variables = [
+        Variable("CHANNEL1", "Lyman-α 120–123 nm",
+                 ["lyman alpha", "lyman", "channel 1", "120-123"]),
+        Variable("CHANNEL2", "Herzberg 190–222 nm",
+                 ["herzberg", "channel 2", "190-222"]),
+        Variable("CHANNEL3", "Aluminium 17–80 nm",
+                 ["aluminium", "aluminum", "al channel", "channel 3", "17-80"]),
+        Variable("CHANNEL4", "Zirconium 6–20 nm",
+                 ["zirconium", "zr", "channel 4", "6-20"]),
+    ]
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
-        check_mission_span(start, end, "2010-01-06", None, "PROBA2 LYRA")
+        self.check_coverage(start, end)
+        channels = {k: v for k, v in CHANNELS.items()
+                    if extras.get("channel") in (None, k)}
 
         from sunpy import timeseries as ts
         from sunpy.net import Fido
@@ -44,9 +59,11 @@ class Proba2Lyra(DataSource):
         tseries = ts.TimeSeries(files, concatenate=True)
         df = downsample_df(clip_df(tseries.to_dataframe(), start, end), start, end)
 
-        series = df_to_series(df, CHANNELS)
+        series = df_to_series(df, channels)
+        label = "PROBA2 LYRA" + (
+            f" · {channels[extras['channel']]}" if extras.get("channel") in channels else "")
         return {
-            "title": f"PROBA2 LYRA  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT",
+            "title": f"{label}  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT",
             "series": series,
             "yaxis": {"label": "Irradiance (W m⁻²)", "type": "log"},
             "xaxis": {"label": "Time (UT)"},

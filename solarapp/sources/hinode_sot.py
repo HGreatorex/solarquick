@@ -22,7 +22,7 @@ from datetime import datetime
 import numpy as np
 
 from solarapp.core.registry import DataSource, PlotSpec
-from solarapp.core.tsutil import check_mission_span, fetch_files
+from solarapp.core.tsutil import fetch_files
 
 MAX_FRAMES = 4
 
@@ -30,10 +30,12 @@ MAX_FRAMES = 4
 class HinodeSot(DataSource):
     name = "hinode_sot"
     display_name = "Hinode SOT (filtergrams)"
-    keywords = ["sot", "hinode", "hinode sot", "filtergram"]
+    keywords = ["sot", "hinode", "hinode sot", "filtergram",
+                "solar optical telescope"]
+    coverage = ("2006-10-25", "2016-02-25")
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
-        check_mission_span(start, end, "2006-10-25", "2016-02-25", "Hinode SOT")
+        self.check_coverage(start, end)
 
         from sunpy.net import Fido
         from sunpy.net import attrs as a

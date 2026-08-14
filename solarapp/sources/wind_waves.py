@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from solarapp.core.fetchcache import cached_download, listing
-from solarapp.core.registry import DataSource, PlotSpec
+from solarapp.core.registry import DataSource, PlotSpec, Variable
 
 SPDF = "https://spdf.gsfc.nasa.gov/pub/data/wind/waves"
 MAX_DAYS = 2          # 256 freqs x ~1800 sweeps/day/receiver
@@ -44,7 +44,17 @@ class WindWaves(DataSource):
     # "radio" is unambiguous here: WAVES is the only radio source installed.
     keywords = ["wind", "waves", "wind waves", "wind spacecraft",
                 "radio", "radio spectrum", "radio spectra", "radio emission",
-                "dynamic spectrum", "type ii", "type iii", "radio burst"]
+                "dynamic spectrum", "type ii", "type iii", "radio burst",
+                "decametric", "kilometric", "hectometric", "rad 1", "rad 2"]
+    coverage = ("1994-11-01", None)
+
+    variable_key = "receiver"
+    variables = [
+        Variable("rad2", "RAD2 (1.075–13.825 MHz)",
+                 ["rad 2", "high frequency receiver", "decametric", "mhz band"]),
+        Variable("rad1", "RAD1 (20–1040 kHz)",
+                 ["rad 1", "low frequency receiver", "kilometric", "khz band"]),
+    ]
 
     def score(self, text: str) -> int:
         s = super().score(text)
@@ -53,6 +63,7 @@ class WindWaves(DataSource):
         return max(s, 0)
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
+        self.check_coverage(start, end)
         if end - start > timedelta(days=MAX_DAYS):
             raise RuntimeError(
                 f"Wind/WAVES spectrogram requests are limited to {MAX_DAYS} days."
@@ -63,8 +74,11 @@ class WindWaves(DataSource):
             days.append(d)
             d += timedelta(days=1)
 
+        wanted = extras.get("receiver")  # "rad1" | "rad2" | None = both
         panels = []
         for rdir, label, divisor, ylabel in RECEIVERS:
+            if wanted not in (None, rdir):
+                continue
             times, freqs, z = self._receiver_spectrogram(rdir, days, start, end)
             if times:
                 panels.append({

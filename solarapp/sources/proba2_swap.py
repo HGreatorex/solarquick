@@ -21,5 +21,6 @@ class Proba2Swap(HelioviewerImageSource):
     # "proba 2" also matches "proba-2" and "proba2" — the matcher treats
     # internal separators as optional (see registry.keyword_regex)
     keywords = ["swap", "proba 2", "euv"]
+    coverage = ("2010-01-06", None)
     channels = CHANNELS
     default_channel = "swap_174"

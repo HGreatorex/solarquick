@@ -26,14 +26,16 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from solarapp.core import httpclient
-from solarapp.core.registry import DataSource, PlotSpec
+from solarapp.core.registry import DataSource, PlotSpec, Variable
 from solarapp.core.tsutil import (
     clip_df, downsample_df, fetch_files, pick_satellite, satellite_in_query,
 )
 
 SWPC_7DAY = "https://services.swpc.noaa.gov/json/goes/primary/xrays-7-day.json"
 
-# words that ask for the high-cadence NCEI product instead of 1-min averages
+# words that ask for the high-cadence NCEI product instead of 1-min averages.
+# Kept as a regex alongside the declared `resolution` variables because the
+# "1/2/3 second" forms are numeric and must be consumed before date parsing.
 HIRES_RE = re.compile(
     r"\b(?:high|full)[\s-]*(?:resolution|res|cadence)\b|\bhi[\s-]*res\b"
     r"|\bflx1s\b|\b[123][\s-]*(?:second|sec|s)\b",
@@ -68,11 +70,34 @@ class GoesXRS(DataSource):
     keywords = [
         "goes xrs", "goes sxr", "goes x-ray",
         "goes", "xrs", "sxr", "soft x-ray", "x-ray", "x-ray flux",
+        "xray flux", "x-ray lightcurve", "x-ray light curve", "flare curve",
+        "goes flux", "goes lightcurve", "goes light curve", "goes class",
+    ]
+    coverage = ("1995-01-01", None)  # NCEI science files begin with GOES-8
+    summary_rank = 10  # the first thing anyone wants for a date
+
+    # Two independent dimensions: which channel to draw, and which NCEI
+    # product to draw it from.
+    variable_key = "channel"
+    variables = [
+        Variable("xrsb", "XRS-B long channel (1–8 Å)",
+                 ["xrs b", "long channel", "long wavelength channel",
+                  "1-8 angstrom", "1-8 a", "0.1-0.8 nm"]),
+        Variable("xrsa", "XRS-A short channel (0.5–4 Å)",
+                 ["xrs a", "short channel", "short wavelength channel",
+                  "0.5-4 angstrom", "0.5-4 a", "0.05-0.4 nm"]),
+        Variable("flx1s", "high-resolution science irradiance (1–3 s)",
+                 ["high resolution", "full resolution", "hi res", "high res",
+                  "high cadence", "full cadence", "flx1s", "1 second data"],
+                 extras={"resolution": "flx1s"}, group="resolution"),
+        Variable("avg1m", "1-minute averages (default)",
+                 ["1 minute average", "one minute average", "avg1m",
+                  "low resolution", "1 min average"],
+                 extras={"resolution": "avg1m"}, group="resolution"),
     ]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
-        extras: dict = {}
-        consumed: list[str] = []
+        extras, consumed = self.variable_extras(query)
 
         sat, text = satellite_in_query(query, 8, 19)
         if sat is not None:
@@ -87,9 +112,11 @@ class GoesXRS(DataSource):
         return extras, consumed
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
+        self.check_coverage(start, end)
         now = datetime.now(timezone.utc)
         sat = extras.get("satellite")
         resolution = extras.get("resolution", "avg1m")
+        channel = extras.get("channel")  # "xrsa" | "xrsb" | None = both
         sampling = None
 
         # the realtime feed is one primary-satellite, 1-min product, so any
@@ -107,8 +134,14 @@ class GoesXRS(DataSource):
             provenance = (f"{which} XRS {cadence} science data (NOAA NCEI) "
                           f"via sunpy/Fido")
 
+        label = f"{which} XRS"
+        if channel in ("xrsa", "xrsb"):
+            # both backends build the series in A, B order
+            series = [series[0] if channel == "xrsa" else series[1]]
+            label = f"{which} {'XRS-A' if channel == 'xrsa' else 'XRS-B'}"
+
         return {
-            "title": f"{which} XRS  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT",
+            "title": f"{label}  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT",
             "series": series,
             "yaxis": {"label": "Flux (W m⁻²)", "type": "log", "range": [1e-9, 1e-3]},
             "xaxis": {"label": "Time (UT)"},

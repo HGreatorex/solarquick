@@ -59,6 +59,7 @@ class HelioviewerImageSource(DataSource):
     default_channel: str = ""
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
+        self.check_coverage(start, end)
         channel = self.channels[extras.get("channel", self.default_channel)]
         # spatial crop: center (arcsec from disk center) + field of view (arcsec)
         crop = None

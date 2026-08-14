@@ -8,11 +8,16 @@ Query examples: "soho eit 195 for 2003-10-28", "lasco c3 yesterday",
 """
 from __future__ import annotations
 
-import re
-
-from solarapp.core.helioviewer import HelioviewerImageSource, match_wavelength
+from solarapp.core.helioviewer import HelioviewerImageSource
+from solarapp.core.registry import Variable
 
 EIT_WAVELENGTHS = [171, 195, 284, 304]
+EIT_ALIASES = {
+    171: ["17.1 nm", "fe ix"],
+    195: ["19.5 nm", "fe xii"],
+    284: ["28.4 nm", "fe xv"],
+    304: ["30.4 nm", "he ii", "helium ii"],
+}
 
 CHANNELS = {
     f"eit_{wl}": {
@@ -36,18 +41,26 @@ CHANNELS["lasco_c3"] = {
 class SohoImages(HelioviewerImageSource):
     name = "soho_images"
     display_name = "SOHO images (EIT / LASCO)"
-    keywords = ["soho", "eit", "lasco", "coronagraph", "cme", "euv"]
+    keywords = ["soho", "eit", "lasco", "coronagraph", "cme",
+                "coronal mass ejection", "white light corona", "euv"]
+    coverage = ("1996-01-11", None)
+    summary_rank = 40  # a coronagraph filmstrip is the other half of a day
+    summary_extras = {"channel": "lasco_c2"}
+
     channels = CHANNELS
     default_channel = "eit_195"
+    variables = [
+        Variable("lasco_c2", "LASCO C2 coronagraph (±6 R☉)",
+                 ["c2", "lasco", "lasco c2", "coronagraph", "cme",
+                  "coronal mass ejection"]),
+        Variable("lasco_c3", "LASCO C3 coronagraph (±32 R☉)",
+                 ["c3", "lasco c3", "wide field coronagraph"]),
+    ] + [
+        Variable(f"eit_{wl}", f"EIT {wl} Å", [str(wl), *EIT_ALIASES[wl]])
+        for wl in EIT_WAVELENGTHS
+    ]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
-        ql = query.lower()
-        m = re.search(r"\bc([23])\b", ql)
-        if m:
-            return {"channel": f"lasco_c{m.group(1)}"}, [m.group(0)]
-        if "lasco" in ql or "coronagraph" in ql or "cme" in ql:
-            return {"channel": "lasco_c2"}, []
-        wl = match_wavelength(ql, EIT_WAVELENGTHS)
-        if wl is not None:
-            return {"channel": f"eit_{wl}"}, [str(wl)]
-        return {"channel": "eit_195"}, []
+        extras, consumed = self.variable_extras(query)
+        extras.setdefault("channel", self.default_channel)
+        return extras, consumed

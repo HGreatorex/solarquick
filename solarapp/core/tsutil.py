@@ -127,6 +127,33 @@ def _error_hint(error) -> str:
     return type(exc).__name__ if exc is not None else "unknown cause"
 
 
+def band_numbers(name: str) -> list[int]:
+    """The energy limits written into a band label ("6 - 12 keV" → [6, 12])."""
+    return [int(n) for n in re.findall(r"\d+", name)]
+
+
+def select_bands(names, band: str | None, hard_from: int = 25) -> list[str]:
+    """The energy-band labels a `band` extra asks for.
+
+    Labels are matched on their numbers rather than their text because the
+    spacing differs between archives and sunpy versions ("6 - 12 keV" vs
+    "6-12 keV"). `hard`/`thermal` split the set at `hard_from` keV, which is
+    what a solar physicist means by those words. Falls back to every band if
+    the selection matches nothing, so a naming change degrades to showing
+    more rather than to an empty plot.
+    """
+    labels = list(names)
+    if band is None:
+        return labels
+    if band == "hard":
+        return [c for c in labels if band_numbers(c)[:1] >= [hard_from]] or labels
+    if band == "thermal":
+        return [c for c in labels if 0 < len(band_numbers(c)) and
+                band_numbers(c)[0] < hard_from] or labels
+    want = band_numbers(band)
+    return [c for c in labels if band_numbers(c)[:2] == want] or labels
+
+
 def df_to_series(df, columns: dict[str, str], positive_only: bool = True) -> list[dict]:
     """Convert dataframe columns to PlotSpec series.
 

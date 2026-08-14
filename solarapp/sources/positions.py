@@ -66,7 +66,8 @@ class Positions(DataSource):
         "position", "where", "where is", "synoptic",
         "constellation", "ephemeris", "solar system", "spacecraft",
         "psp", "parker", "parker solar probe", "bepicolombo", "bepi",
-        "stereo", "planets",
+        "stereo", "planets", "orbit", "heliocentric distance",
+        "how far", "separation angle",
     ]
 
     def score(self, text: str) -> int:

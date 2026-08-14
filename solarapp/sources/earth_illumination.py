@@ -122,6 +122,8 @@ class EarthIllumination(DataSource):
     keywords = [
         "terminator", "illumination", "day night", "day/night", "daylight",
         "insolation", "subsolar", "twilight", "sza", "sunlit", "earth map",
+        "solar zenith angle", "where is it dark", "where is it light",
+        "night side", "dayside",
     ]
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:

@@ -9,28 +9,30 @@ Query examples: "fermi gbm 2017-09-06", "gbm n3 for 2022-04-20".
 """
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
-from solarapp.core.registry import DataSource, PlotSpec
-from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, downsample_df, fetch_files
+from solarapp.core.registry import DataSource, PlotSpec, Variable
+from solarapp.core.tsutil import clip_df, df_to_series, downsample_df, fetch_files
 
 DEFAULT_DETECTOR = "n5"
+# the twelve NaI detectors; b0/b1 are the BGOs, which CTIME also carries
+DETECTORS = [f"n{d}" for d in "0123456789ab"] + ["b0", "b1"]
 
 
 class FermiGbm(DataSource):
     name = "fermi_gbm"
     display_name = "Fermi GBM (X-ray/gamma lightcurves)"
-    keywords = ["fermi", "gbm", "fermi gbm", "gamma ray", "gamma-ray burst"]
+    keywords = ["fermi", "gbm", "fermi gbm", "gamma ray", "gamma-ray burst",
+                "burst monitor"]
+    coverage = ("2008-08-12", None)
 
-    def parse_extras(self, query: str) -> tuple[dict, list[str]]:
-        m = re.search(r"\b(n[0-9ab])\b", query.lower())
-        if m:
-            return {"detector": m.group(1)}, [m.group(0)]
-        return {}, []
+    variable_key = "detector"
+    variables = [
+        Variable(d, f"detector {d}", [d, f"detector {d}"]) for d in DETECTORS
+    ]
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
-        check_mission_span(start, end, "2008-08-12", None, "Fermi GBM")
+        self.check_coverage(start, end)
         detector = extras.get("detector", DEFAULT_DETECTOR)
 
         from sunpy import timeseries as ts

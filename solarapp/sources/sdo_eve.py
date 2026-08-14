@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from solarapp.core.fetchcache import cached_download, listing
-from solarapp.core.registry import DataSource, PlotSpec
+from solarapp.core.registry import DataSource, PlotSpec, Variable
 
 LASP = "https://lasp.colorado.edu/eve/data_access/eve_data/products/level2b"
 MAX_LINE_DAYS = 7
@@ -42,30 +42,69 @@ _WAVE_RE = re.compile(r"(?<![-/\d.])(\d{1,3}\.\d+|(?!19|20)\d{3,4}|\d{3})(?![-/\
 class SdoEve(DataSource):
     name = "sdo_eve"
     display_name = "SDO EVE (EUV irradiance: lines & spectra)"
-    keywords = ["eve", "sdo eve", "megs", "eve spectrum", "irradiance", "euv"]
+    keywords = ["eve", "sdo eve", "megs", "eve spectrum", "irradiance",
+                "solar spectrum", "euv"]
+    coverage = ("2010-05-01", None)
+
+    # The lines people actually ask for by name, so they resolve without the
+    # generic ion/wavelength regex (and so the spell-checker and the help
+    # listing know them). Anything not declared still works: _ION_RE and
+    # _WAVE_RE below read an arbitrary ion or wavelength out of the query.
+    variable_key = "line_nm"
+    variables = [
+        Variable("30.4", "He II 30.4 nm", ["30.4", "304", "he ii", "helium ii"],
+                 extras={"line_nm": 30.4}),
+        Variable("17.1", "Fe IX 17.1 nm", ["17.1", "171", "fe ix"],
+                 extras={"line_nm": 17.1}),
+        Variable("19.5", "Fe XII 19.5 nm", ["19.5", "195", "fe xii"],
+                 extras={"line_nm": 19.5}),
+        Variable("28.4", "Fe XV 28.4 nm", ["28.4", "284", "fe xv"],
+                 extras={"line_nm": 28.4}),
+        Variable("33.5", "Fe XVI 33.5 nm", ["33.5", "335", "fe xvi"],
+                 extras={"line_nm": 33.5}),
+        Variable("9.4", "Fe XVIII 9.4 nm", ["9.4", "94", "fe xviii"],
+                 extras={"line_nm": 9.4}),
+        Variable("13.3", "Fe XX/XXIII 13.3 nm", ["13.3", "133", "fe xx", "fe xxiii"],
+                 extras={"line_nm": 13.3}),
+        Variable("36.8", "Mg IX 36.8 nm", ["36.8", "368", "mg ix"],
+                 extras={"line_nm": 36.8}),
+        Variable("62.9", "O V 62.9 nm", ["62.9", "629", "o v"],
+                 extras={"line_nm": 62.9}),
+        Variable("102.5", "H I Lyman-β 102.5 nm", ["102.5", "1025", "lyman beta"],
+                 extras={"line_nm": 102.5}),
+        # Lyman-α is deliberately absent: it is above the MEGS range this
+        # product covers, and GOES EUVS / EUI serve it instead.
+        Variable("spectrum", "full EVE spectrum (no line named)",
+                 ["spectrum", "spectra", "full spectrum"],
+                 extras={}, group="mode"),
+    ]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
         ql = query.lower()
-        extras: dict = {}
-        consumed: list[str] = []
+        extras, consumed = self.variable_extras(ql)
 
         m = _ION_RE.search(ql)
         if m:
             extras["line_ion"] = f"{m.group(1).capitalize()} {m.group(2).upper()}"
             consumed.append(m.group(0))
+            if not any(ch.isdigit() for tok in consumed for ch in tok):
+                # the ion was named with no wavelength: resolve it against the
+                # archive's own line list rather than pinning it to the
+                # wavelength this table happens to carry
+                extras.pop("line_nm", None)
 
-        w = _WAVE_RE.search(ql)
-        if w:
-            v = float(w.group(1))
-            nm = v if v <= 106 else (v / 10 if v / 10 <= 106 else None)
-            if nm is not None and nm >= 6:
-                extras["line_nm"] = nm
-                consumed.append(w.group(1))
+        if "line_nm" not in extras:
+            w = _WAVE_RE.search(ql)
+            if w:
+                v = float(w.group(1))
+                nm = v if v <= 106 else (v / 10 if v / 10 <= 106 else None)
+                if nm is not None and nm >= 6:
+                    extras["line_nm"] = nm
+                    consumed.append(w.group(1))
         return extras, consumed
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
-        if end < datetime(2010, 5, 1, tzinfo=start.tzinfo):
-            raise RuntimeError("SDO EVE data starts 2010-05-01.")
+        self.check_coverage(start, end)
         if "line_ion" in extras or "line_nm" in extras:
             return self._fetch_line(start, end, extras.get("line_ion"),
                                     extras.get("line_nm"))

@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from solarapp.core.fetchcache import cached_download, listing
-from solarapp.core.registry import DataSource, PlotSpec
+from solarapp.core.registry import DataSource, PlotSpec, Variable
 from solarapp.core.tsutil import (
     check_mission_span, clip_df, df_to_series, downsample_df, satellite_in_query,
 )
@@ -55,15 +55,10 @@ CHANNELS = {
     "irr_1405": ("140.5 nm Si IV", "EUVS-B"),
     "MgII_standard": ("MgII index", "MgII"),
 }
-CHANNEL_ALIASES = {
-    "256": "irr_256", "25.6": "irr_256",
-    "284": "irr_284", "28.4": "irr_284",
-    "304": "irr_304", "30.4": "irr_304",
-    "1175": "irr_1175", "117.5": "irr_1175",
-    "1216": "irr_1216", "121.6": "irr_1216",
-    "1335": "irr_1335", "133.5": "irr_1335",
-    "1405": "irr_1405", "140.5": "irr_1405",
-}
+# channel selection now lives in GoesEuvs.variables (declared options), so the
+# wavelength/ion aliases are matched by the shared registry machinery instead
+# of a private lookup table.
+
 # (primary-from date, satellite number)
 PRIMARY = [("2017-02-07", 16), ("2025-04-07", 19)]
 GOES_R_START = "2017-02-07"
@@ -110,12 +105,29 @@ class GoesEuvs(DataSource):
     # channel words (mg ii, lyman alpha) deliberately aren't keywords: they
     # select a channel via parse_extras once "euvs" has routed here, and they
     # would otherwise hijack queries meant for EVE or EUI Lyman-α.
-    keywords = ["euvs", "goes euvs", "euv sensor", "euv"]
+    keywords = ["euvs", "goes euvs", "euv sensor", "exis", "euv"]
+    coverage = ("2009-09-01", None)  # legacy GOES-14 EUVS onwards
+
+    # One line per declared variable. The ion names come straight from the
+    # channel labels, so "euvs fe xv" now works as well as "euvs 284"; 25.6 nm
+    # is deliberately *not* given "he ii" — 30.4 is what anyone means by it.
+    variables = [
+        Variable("irr_304", "30.4 nm He II", ["304", "30.4", "30.4 nm", "he ii", "helium ii"]),
+        Variable("irr_256", "25.6 nm He II", ["256", "25.6", "25.6 nm"]),
+        Variable("irr_284", "28.4 nm Fe XV", ["284", "28.4", "28.4 nm", "fe xv", "iron xv"]),
+        Variable("irr_1175", "117.5 nm C III", ["1175", "117.5", "117.5 nm", "c iii"]),
+        Variable("irr_1216", "121.6 nm Lyman-α",
+                 ["1216", "121.6", "121.6 nm", "lyman alpha", "lyman", "ly alpha", "h i"]),
+        Variable("irr_1335", "133.5 nm C II", ["1335", "133.5", "133.5 nm", "c ii", "carbon ii"]),
+        Variable("irr_1405", "140.5 nm Si IV",
+                 ["1405", "140.5", "140.5 nm", "si iv", "silicon iv"]),
+        Variable("MgII_standard", "MgII core-to-wing index",
+                 ["mg ii", "magnesium", "mg ii index", "core to wing", "mgii index"]),
+    ]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
         ql = query.lower()
-        extras: dict = {}
-        consumed: list[str] = []
+        extras, consumed = self.variable_extras(ql)
 
         # 14 upwards: EUVS flew on GOES-13 too, but nothing from it was
         # reduced to L2, so 13 is left to be read as part of a date
@@ -123,19 +135,10 @@ class GoesEuvs(DataSource):
         if sat is not None:
             extras["satellite"] = sat
             consumed.append(text)
-
-        if re.search(r"\bmg ?ii\b", ql):
-            extras["channel"] = "MgII_standard"
-        elif "lyman" in ql:
-            extras["channel"] = "irr_1216"
-        else:
-            m = re.search(r"\b(\d{3,4}(?:\.\d)?|\d{2}\.\d)\b", ql)
-            if m and m.group(1) in CHANNEL_ALIASES:
-                extras["channel"] = CHANNEL_ALIASES[m.group(1)]
-                consumed.append(m.group(0))
         return extras, consumed
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
+        self.check_coverage(start, end)
         if end - start > timedelta(days=MAX_DAYS):
             raise RuntimeError(f"GOES EUVS requests are limited to {MAX_DAYS} days.")
         sat = extras.get("satellite")

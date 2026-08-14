@@ -15,9 +15,8 @@ import re
 from datetime import datetime
 
 from solarapp.core import hek
-from solarapp.core.registry import DataSource, PlotSpec
+from solarapp.core.registry import DataSource, PlotSpec, Variable
 
-_CLASS = re.compile(r"\b([abcmx])[\s-]*class\b", re.I)
 _ABOVE = re.compile(r"\b(?:above|over|>=?)\s*([abcmx])\s*(\d+(?:\.\d+)?)?", re.I)
 _SUPERLATIVE = re.compile(r"\b(biggest|largest|strongest|most powerful)\b", re.I)
 _AT = re.compile(r"\bflare\s+at\b", re.I)
@@ -26,20 +25,28 @@ _AT = re.compile(r"\bflare\s+at\b", re.I)
 class Flares(DataSource):
     name = "flares"
     display_name = "Solar flares (HEK/SWPC catalog)"
-    keywords = ["flare", "flares", "flare list", "solar flares"]
+    keywords = ["flare", "flares", "flare list", "solar flares",
+                "flare catalog", "flare catalogue", "goes flare", "eruption"]
+    coverage = ("1996-01-01", None)  # HEK's SWPC list
+    summary_rank = 20  # what happened, in one table
+
+    # Class thresholds are read by parse_extras below (they carry a number:
+    # "above M5"), so the declared variables only cover the bare letters.
+    variable_key = "min_class"
+    variables = [
+        Variable(c, f"{c}-class and above", [f"{c} class"])
+        for c in ("X", "M", "C", "B", "A")
+    ]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
-        extras: dict = {}
-        consumed: list[str] = []
-        m = _CLASS.search(query)
+        # the declared variables cover the bare letters ("x-class"); a
+        # threshold that carries a number ("above M5") needs the regex, and
+        # wins because it is the more specific statement
+        extras, consumed = self.variable_extras(query)
+        m = _ABOVE.search(query)
         if m:
-            extras["min_class"] = m.group(1).upper()
+            extras["min_class"] = (m.group(1) + (m.group(2) or "")).upper()
             consumed.append(m.group(0))
-        else:
-            m = _ABOVE.search(query)
-            if m:
-                extras["min_class"] = (m.group(1) + (m.group(2) or "")).upper()
-                consumed.append(m.group(0))
         if _SUPERLATIVE.search(query):
             extras["superlative"] = True
         if _AT.search(query):

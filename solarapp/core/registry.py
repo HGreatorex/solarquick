@@ -178,8 +178,12 @@ class DataSource(ABC):
         for var in self.variables:
             for kw in var.keywords:
                 words.update(re.findall(r"[a-z]+", kw.lower()))
-                joined = re.sub(r"[^a-z]", "", kw.lower())
-                if len(joined) > 1:
+                # separators inside a keyword are optional when matching, so
+                # the run-together spelling is a real word too ("xray",
+                # "mgii") — but only when nothing but separators was removed,
+                # or "lasco c2" would contribute the non-word "lascoc"
+                joined = re.sub(r"[\s\-/]", "", kw.lower())
+                if len(joined) > 1 and joined.isalpha():
                     words.add(joined)
         return words
 
@@ -288,8 +292,12 @@ class Registry:
         for src in self._sources.values():
             for kw in src.keywords:
                 words.update(re.findall(r"[a-z]+", kw.lower()))
-                joined = re.sub(r"[^a-z]", "", kw.lower())
-                if len(joined) > 1:
+                # separators inside a keyword are optional when matching, so
+                # the run-together spelling is a real word too ("xray",
+                # "mgii") — but only when nothing but separators was removed,
+                # or "lasco c2" would contribute the non-word "lascoc"
+                joined = re.sub(r"[\s\-/]", "", kw.lower())
+                if len(joined) > 1 and joined.isalpha():
                     words.add(joined)
             words |= src.variable_words()
         return words

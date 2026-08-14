@@ -42,7 +42,7 @@ def test_yesterday():
 
 def test_unknown_source():
     p = parse("show me the weather for tomorrow", REG)
-    assert not p.ok and "No data source" in p.errors[0]
+    assert not p.ok and "No instrument or quantity" in p.errors[0]
 
 
 def test_missing_date():

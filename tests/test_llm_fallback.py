@@ -56,7 +56,7 @@ def test_rewrite_is_parsed_and_reported(llm):
 
 def test_rewrite_supports_multi_source(llm):
     llm(query="goes xrs and aia 304 yesterday")
-    p = parse("whatever the sun was doing in x-rays and helium last night", REG)
+    p = parse("whatever the sun was up to last night", REG)
     assert p.ok
     assert [r.source for r in p.requests] == ["goes_xrs", "sdo_images"]
 
@@ -88,7 +88,7 @@ def test_hallucinated_source_cannot_widen_the_app(llm):
     llm(query="iris slit-jaw 2796 yesterday")
     p = parse("chromospheric slit spectra from last night", REG)
     assert not p.ok
-    assert "No data source" in p.errors[0]
+    assert "No instrument or quantity" in p.errors[0]
 
 
 def test_injected_instruction_is_inert(llm):
@@ -112,7 +112,7 @@ def test_api_failure_keeps_the_original_error(llm):
     llm(raises=RuntimeError("could not reach the Claude API"))
     p = parse("something entirely unparseable", REG)
     assert not p.ok
-    assert "No data source" in p.errors[0]  # original, clearer message first
+    assert "No instrument or quantity" in p.errors[0]  # original, clearer message first
     assert any("unavailable" in e for e in p.errors)
 
 
@@ -120,7 +120,7 @@ def test_unparseable_rewrite_keeps_the_original_error(llm):
     llm(query="this rewrite also fails to parse")
     p = parse("gibberish", REG)
     assert not p.ok
-    assert "No data source" in p.errors[0]
+    assert "No instrument or quantity" in p.errors[0]
     assert p.rewritten is None
 
 

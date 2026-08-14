@@ -130,7 +130,7 @@ def test_autocorrect_preserves_numbers_and_punctuation():
 def test_nonsense_still_fails_with_original_error():
     p = parse("show me the weather in Belfast tomorrow", REG)
     assert not p.ok
-    assert "No data source" in p.errors[0]
+    assert "No instrument or quantity" in p.errors[0]
 
 
 def test_failed_correction_keeps_original_error():
@@ -138,7 +138,7 @@ def test_failed_correction_keeps_original_error():
     # a confusing error about the corrected text
     p = parse("qqqqqqq zzzzzzz", REG)
     assert not p.ok
-    assert "No data source" in p.errors[0]
+    assert "No instrument or quantity" in p.errors[0]
 
 
 def test_real_keywords_are_in_vocabulary():

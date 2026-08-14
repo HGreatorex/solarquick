@@ -74,10 +74,11 @@ class SdoEve(DataSource):
                  extras={"line_nm": 102.5}),
         # Lyman-α is deliberately absent: it is above the MEGS range this
         # product covers, and GOES EUVS / EUI serve it instead.
-        Variable("spectrum", "full EVE spectrum (no line named)",
-                 ["spectrum", "spectra", "full spectrum"],
-                 extras={}, group="mode"),
     ]
+    # No "spectrum" variable: the spectrum is what EVE returns when no line is
+    # named, and declaring the word would make a bare "spectra" route here —
+    # answering "chromospheric slit spectra" (an IRIS request) with an EVE
+    # irradiance spectrum, which is a different measurement entirely.
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
         ql = query.lower()

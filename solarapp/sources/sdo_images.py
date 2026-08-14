@@ -18,10 +18,10 @@ AIA_ALIASES = {
     171: ["17.1 nm", "fe ix"],
     193: ["19.3 nm", "fe xii", "fe xxiv"],
     211: ["21.1 nm", "fe xiv"],
-    304: ["30.4 nm", "he ii", "helium ii", "chromosphere"],
+    304: ["30.4 nm", "he ii", "helium ii"],
     335: ["33.5 nm", "fe xvi"],
-    1600: ["160 nm", "c iv", "transition region"],
-    1700: ["170 nm", "photosphere uv"],
+    1600: ["160 nm", "c iv"],
+    1700: ["170 nm"],
     4500: ["450 nm", "aia white light"],
 }
 

@@ -9,11 +9,19 @@ Spiritual successor to the IDL Solar Flare Finder; philosophically aligned with 
 1. **One command to run**: `python -m solarapp` → browser UI at `localhost:8000`.
 2. **Plugins are just files**: adding a data source = dropping one `.py` file into
    `solarapp/sources/`. No registration code elsewhere. A `git push` adds a mission.
-3. **Rule-based query parsing** (no API costs, deterministic). Each plugin declares its
-   own keywords; the parser's vocabulary grows automatically with each new source.
-   An optional LLM layer can be bolted on later behind the same `parse()` interface.
-4. **Backend returns a generic PlotSpec (JSON)**, frontend renders it with Plotly.
+3. **Everything is derived from what a plugin declares.** A source states its
+   `keywords`, its `variables` (the options *inside* it), its `coverage` and its
+   `summary_rank`; routing, option matching, the spell-checker's vocabulary,
+   pre-flight refusals, the overview view, the progress display and
+   `/api/sources` all read those four and need no edit of their own.
+4. **Rule-based query parsing** (no API costs, deterministic). The optional LLM
+   layer only *rewrites* a query the rules failed on, behind the same `parse()`.
+5. **Backend returns a generic PlotSpec (JSON)**, frontend renders it with Plotly.
    Plugins never touch frontend code — a new source works in the UI for free.
+6. **Never a confidently wrong answer.** Every interpretation is surfaced
+   (typo correction, LLM rewrite, an auto-composed overview, a partial
+   failure), ties between instruments are asked rather than resolved, and a
+   query naming something unsupported fails instead of being approximated.
 
 ## Layout
 
@@ -25,11 +33,15 @@ solarapp/
 ├── solarapp/
 │   ├── __main__.py          ← `python -m solarapp` entry point
 │   ├── core/
-│   │   ├── registry.py      ← DataSource base class + auto-discovery of sources/
-│   │   └── parser.py        ← rule-based NL parser (source keywords + dates)
+│   │   ├── registry.py      ← DataSource + Variable + auto-discovery of sources/
+│   │   ├── parser.py        ← which source(s), which options (rule-based)
+│   │   └── timegrammar.py   ← which time span (dates, weekdays, ranges, DOY, CR)
 │   ├── core/  (also)
+│   │   ├── pipeline.py      ← one query as a stream of progress events
+│   │   ├── summary.py       ← the overview a bare date composes
+│   │   ├── timings.py       ← learned per-source durations (~/.cache/solarapp)
 │   │   ├── helioviewer.py   ← shared Helioviewer image pipeline (channel tables)
-│   │   ├── tsutil.py        ← mission-span guard, df→series, clip, downsample
+│   │   ├── tsutil.py        ← df→series, clip, downsample, energy-band select
 │   │   └── fetchcache.py    ← ~/.cache/solarapp download cache + dir listings
 │   ├── sources/
 │   │   ├── goes_xrs.py      ← GOES XRS (NCEI archive via Fido, SWPC JSON for recent;
@@ -48,21 +60,29 @@ solarapp/
 │   │   ├── wind_waves.py    ← Wind/WAVES RAD1+RAD2 spectrograms (SPDF L2 CDF)
 │   │   └── hinode_sot.py    ← Hinode SOT filtergrams via VSO (FITS → PNG data URIs)
 │   └── server/
-│       ├── app.py           ← FastAPI: /api/query, /api/sources, serves static/
-│       └── static/index.html← single-page UI: query box + Plotly plot
-└── tests/test_parser.py
+│       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
+│       └── static/index.html← single-page UI: query box + progress + Plotly plot
+└── tests/                   ← 354, all offline
 ```
 
 ## Request flow
 
 ```
 "show me GOES SXR for 10 July 2026"
-   → POST /api/query
-   → parser.parse(): match plugin keywords → goes_xrs; extract date(s) → 2026-07-10 00:00–24:00 UT
-   → GoesXRS.fetch(start, end): recent (<7 d) → SWPC realtime JSON; else → Fido/NCEI netCDF
-   → PlotSpec JSON {title, series[], yaxis{log}, bands[A/B/C/M/X]}
+   → POST /api/query/stream                    (or /api/query for one JSON blob)
+   → pipeline.run(): a generator of progress events, drained or forwarded
+   → parser.parse(): segments → goes_xrs; variables → extras; consumed tokens
+                     stripped; timegrammar.extract() → 2026-07-10 00:00–24:00 UT
+   → {"event": "parsed", sources:[...with learned estimate_ms...]}   ← the UI draws
+   → GoesXRS.fetch(start, end): recent (<7 d) → SWPC realtime JSON; else → Fido/NCEI
+   → {"event": "source_done", ms, ok}                               ← ticked off
+   → {"event": "result", spec: {title, series[], yaxis{log}, bands[A/B/C/M/X]}}
    → Plotly renders interactive log-scale timeseries
 ```
+
+A query naming no instrument at all takes one extra step: if it is *only* a
+date, `summary.compose()` builds the overview from the sources that opted in
+and were observing then, and the reading is reported in the note.
 
 ## Key interfaces
 
@@ -72,10 +92,22 @@ class MySource(DataSource):
     name = "my_source"
     display_name = "My Instrument"
     keywords = ["mymission", "instrument nickname", ...]   # parser vocabulary
+    coverage = ("2015-03-01", None)      # (first light, last light); checked
+                                         # before any network call
+    summary_rank = 50                    # opt in to the bare-date overview
+    summary_extras = {"channel": "blue"} # ...with these options
+    variable_key = "channel"             # extras key a bare Variable fills
+    variables = [                        # the options *inside* this source
+        Variable("blue", "Blue 430 nm", ["blue", "430", "43 nm"]),
+        Variable("fast", "high cadence", ["high resolution"],
+                 extras={"cadence": "1s"}, group="cadence"),
+    ]
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec: ...
-    # optional: pull source-specific options out of the raw query.
-    # Returns (extras, consumed_tokens); consumed tokens are stripped before
-    # date parsing (so "aia 171" doesn't feed 171 to the date parser).
+    # optional: options a keyword table can't express (a satellite number, a
+    # flare-class threshold). Call variable_extras() from the override to keep
+    # the declared ones. Returns (extras, consumed_tokens); consumed tokens are
+    # stripped before date parsing (so "aia 171" doesn't feed 171 to the date
+    # parser).
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
     # optional: override how strongly a query asks for this source. The default
     # sums the lengths of the keywords that matched; override only for context
@@ -84,6 +116,23 @@ class MySource(DataSource):
     # orbiter"). Do NOT use it to break a genuine tie — see below.
     def score(self, text: str) -> int: ...
 ```
+
+**Variables are declared, not hidden in a regex.** Before this, every option
+lived inside a private `parse_extras`, so the rest of the app could not know
+that "he ii" meant anything: `euvs he ii`, `lyra zirconium` and `rhessi 25-50
+keV` all silently returned the source default, which is a different quantity
+with nothing to signal the misread. Declaring them buys six things at once —
+the option is matchable, its words join the spell-checker's vocabulary, its
+matched text is consumed before date parsing, `/api/sources` can list it, a
+"…and 193" segment can attach to the instrument named before it, and a
+quantity named with no instrument ("sunspots") can find its own source.
+
+`group` separates *dimensions* from *alternatives*: options in different
+groups combine ("short channel high resolution" is a channel and a cadence),
+options in the same group are exclusive and the best-scoring one wins. Within
+one source a tie goes to the earlier declaration — between sources a tie is a
+question, but between two channels of one instrument, refusing to answer is
+the worse trade.
 
 **Keyword matching** (`registry.keyword_regex`) treats internal hyphens,
 slashes and spaces as interchangeable and optional, and allows a trailing
@@ -97,6 +146,33 @@ the parser returns an error naming all of them instead of picking one — `euv`
 really does belong to AIA, EIT, EUI, SWAP, EVE and EUVS, and load order is not
 an answer. Adding a broad keyword to several sources is therefore safe: naming
 an instrument breaks the tie by scoring higher.
+
+**Time grammar** (`core/timegrammar.py`) is the whole of "when". It is tried
+from the most explicit phrasing to the least — ISO range, single ISO, natural
+range, slash date, relative words, weekday, day-of-year/Carrington, fuzzy
+precision — so a query that states a date outright is never reinterpreted by a
+looser rule. Two conventions worth knowing: precision sets the *width* of the
+span ("2026" is a year, "10 July 2026" a day), and a relative word resolves
+*backwards*, because data only exists in the past — a bare weekday or a
+month-and-day with no year means the most recent one, and "next" is the only
+qualifier that looks forward.
+
+**The overview** (`core/summary.py`) answers a query that is only a date.
+Membership is the plugins' `summary_rank`, filtered by `coverage`, capped at
+four — so 2003 quietly gets XRS + flares + LASCO rather than those plus two
+errors about SDO not existing yet. The guard that keeps this honest is
+`parser.names_only_a_date`: "solar wind speed yesterday" also names no
+instrument, but answering it with an overview would be a wrong answer to a
+question about the plasma stream, so it errors.
+
+**Progress** (`core/pipeline.py`, `POST /api/query/stream`) makes one query a
+generator of events; `/api/query` drains it and returns the last one, so the
+two endpoints cannot disagree. The browser reads NDJSON and draws a row per
+source with the option chosen, elapsed time, and how long that source usually
+takes — from `core/timings.py`, an EWMA per source in `~/.cache/solarapp`.
+Those durations are *measured, never declared*: what a fetch costs depends on
+the archive, the window, the network and the local file cache, so a "typical"
+number in a plugin would be wrong on every machine but the author's.
 
 **Export** (`core/export.py`, `POST /api/export`) turns one PlotSpec block into
 a CSV or JSON download. The browser posts back the spec it is already
@@ -212,7 +288,27 @@ ordinary multi-source request.
 - **Times are UTC everywhere.** Parser assumes day-first for ambiguous dates (10/07/2026 = 10 July).
 - **sunpy caches downloads** in `~/sunpy/data` — repeat queries are fast, disk grows.
 - **Parser is keyword-based**: unknown phrasings fail gracefully with a "did you mean"
-  message listing available sources. It is not (yet) an AI.
+  message listing the nearest known phrases and the available sources. It is not an AI.
+- **The vocabulary's run-together spelling must not strip digits.** A keyword's
+  separators are optional when matching, so "x-ray" also teaches the
+  spell-checker "xray" — but building that form with `[^a-z]` removal turned
+  "lasco c2" into the non-word "lascoc", and `lasoc` then "corrected" to it.
+  Only separators are removed now, and the result is kept only if it is
+  alphabetic.
+- **Function words have to be in the vocabulary.** With "band" among the
+  declared option words, an unprotected "and" was one edit away from it, and
+  every multi-source query silently lost its second instrument. `_STOPWORDS`
+  exists to be *known*, not to be matched. A correction is also refused when it
+  changes a word's length by more than one: a typo is a slip ("lasoc" →
+  "lasco"), whereas "slit" → "sunlit" invents two characters and answers a
+  question about spectrograph slits with a daylight map.
+- **Physics nicknames make bad option keywords.** "chromosphere" on AIA 304 and
+  a bare "spectra" on EVE both routed queries meant for instruments SolarQuick
+  does not have (IRIS, in both cases). Ion labels and wavelengths are precise;
+  vague descriptions of what a channel *shows* are not, and they compete with
+  every unsupported instrument that shows the same thing.
+- **A weekday abbreviation list must exclude "sat" and "sun."** In this app
+  they are a satellite and the star far more often than Saturday and Sunday.
 - **Typos are fixed by retry, not looser matching.** `_autocorrect` rewrites
   only tokens absent from the vocabulary (keyword words + date/grammar words),
   then the query is parsed again; corrections are reported to the user via
@@ -319,6 +415,14 @@ ordinary multi-source request.
   irradiance product (`gxrs-l2-irrad_science`, 1–3 s depending on spacecraft,
   via Fido's `flx1s`) plus explicit satellite choice back to GOES-8. Both
   mean-bin for the browser and disclose the binning in exports.
+- v1.3 (this build): query intelligence, without requiring the LLM layer.
+  Sources declare their `variables`, `coverage` and `summary_rank`, and the
+  parser, spell-checker, help listing and overview all derive from those; the
+  time grammar moves to `core/timegrammar.py` and gains weekdays, spelled-out
+  counts, parts of a day, weekends, bare day-of-month, slash dates, natural
+  ranges, day-of-year and Carrington rotations; a segment naming only an option
+  continues the instrument before it; a bare date composes an overview; and
+  every query streams progress events with learned per-source durations.
 - next: hosted deploy — but see the note in the handoff section: local install
   is the recommended distribution route, and the LLM layer does not require
   hosting.
@@ -327,8 +431,9 @@ ordinary multi-source request.
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (269, all offline — external APIs are never
-called from the suite).
+template. Tests: `pytest tests/` (354, all offline — external APIs are never
+called from the suite, and a test that quietly starts doing so shows up as a
+suite that takes twenty seconds instead of one).
 
 **Verify external APIs live before writing a plugin.** Several archives have
 moved or lag: the Wind/WAVES `.R1` files are gone (use SPDF L2 CDFs), LASP's EVE

@@ -4,14 +4,17 @@
 English, get a plot.**
 
 > "show me the GOES SXR data for the 10th of July 2026"
-> "sdo aia 304 and goes xrs yesterday"
+> "xrays wednesday"
+> "2017-09-06" — a date on its own gives you an overview of the day
+> "aia 171, 193 and 211 yesterday"
 > "biggest flare since 2014"
 
 SolarQuick runs as a small web app on your own machine. It fetches from the
 public science archives (NOAA, Helioviewer, LASP, NASA SPDF, LMSAL/HEK, JPL) on
 demand — there is no database to load and nothing to configure. 16 data sources
-are built in, and a plain-English query picks the instrument, the time range and
-the options.
+are built in, and a plain-English query picks the instrument, the channel or
+line, and the time range. No API key and no AI service is needed for any of
+that; the rules do it on your machine.
 
 > **Beta.** This is a working tool under active development, shared for testing.
 > Expect rough edges, and please report them (see [Reporting problems](#reporting-problems)).
@@ -26,6 +29,7 @@ the options.
 - [Install](#install) — **start here**
 - [Running it](#running-it)
 - [What you can ask for](#what-you-can-ask-for)
+- [While it's fetching](#while-its-fetching)
 - [Optional: smarter query understanding](#optional-smarter-query-understanding)
 - [Exporting data](#exporting-data)
 - [What this is and isn't](#what-this-is-and-isnt)
@@ -154,7 +158,20 @@ machine.
 
 ## What you can ask for
 
-Type a source, optionally some options, and a time. Examples that work:
+Type a source, optionally some options, and a time. Or just type a date.
+
+**A date on its own gives you an overview** — no instrument needed:
+```
+2017-09-06
+what happened yesterday
+everything on 2003-10-28
+```
+You get X-ray flux, the flare list, an EUV filmstrip and a coronagraph, chosen
+from whatever was actually observing on that date (2003 has no SDO, so it
+isn't offered). SolarQuick says what it picked and invites you to name an
+instrument to go deeper.
+
+Examples that work:
 
 **Timeseries**
 ```
@@ -217,7 +234,24 @@ flare table opens that flare's event view.
 ```
 sdo aia 304 and goes xrs yesterday
 goes, stix and lasco c2 for 2026-07-10
-aia 171 and aia 304 yesterday
+aia 171, 193 and 211 yesterday        # the instrument carries across the list
+euvs 304 and 121.6 yesterday
+```
+
+**Ask for one thing out of an instrument.** Every source declares its own
+options — channels, lines, energy bands, detectors — and they can be named in
+the instrument's own vocabulary rather than only by number:
+```
+goes xrs long channel yesterday       # XRS-B alone, not both channels
+euvs he ii 2026-08-01                 # the 30.4 nm line
+euvs mg ii yesterday                  # the core-to-wing index
+aia fe xii yesterday                  # i.e. AIA 193
+aia 30.4 nm yesterday                 # nm or Å, whichever you think in
+rhessi 25-50 kev 2003-10-28
+stix thermal yesterday                # or "hard x-ray" for the ≥25 keV bands
+lyra zirconium yesterday
+wind waves rad1 2026-07-11
+sunspots yesterday                    # names a thing, finds the instrument
 ```
 
 **Context**
@@ -228,10 +262,20 @@ terminator today
 day night map from 2026-06-01 to 2026-07-01
 ```
 
-**Time can be written** as a date (`2026-07-10`, `10 July 2026`), a range
-(`from 2026-07-01 to 2026-07-08`), a month (`july 2026`), a year (`2024`),
-`today` / `yesterday`, `now`, `latest`, `3 days ago`, `this week`,
-`this month`, `last 3 days`, `past 2 weeks`, or `since 2014`.
+**Time can be written almost any way you'd say it.** All UTC, day-first for
+ambiguous numbers (`10/07` is July):
+
+| | |
+|---|---|
+| dates | `2026-07-10`, `10 July 2026`, `10/07/2026`, `10.07.26`, `july 2026`, `2024` |
+| ranges | `from 2026-07-01 to 2026-07-08`, `10 to 12 july 2026`, `july to august 2014`, `between 2014 and 2016` |
+| relative | `today`, `yesterday`, `now`, `latest`, `3 days ago`, `a couple of days ago`, `last 3 days`, `past 2 weeks`, `last fortnight`, `this week`, `since 2014` |
+| weekdays | `wednesday`, `last friday`, `next monday`, `weds`, `this weekend` |
+| parts of a day | `yesterday afternoon`, `last night`, `this morning`, `wednesday morning` |
+| the obvious shorthands | `the 10th`, `5 december` (the most recent one, not next year's) |
+| observing calendars | `doy 150 2024`, `carrington rotation 2250` |
+
+So `xrays wednesday` is a complete query.
 
 **A time of day narrows any single day**, in whichever way you write it:
 ```
@@ -253,6 +297,31 @@ rather than picking one.
 
 **Typos are tolerated.** `goess xsr yesterdy` works, and SolarQuick tells you
 what it read your query as rather than silently guessing.
+
+**A query it can't read is never quietly approximated.** `solar wind speed
+yesterday` names something SolarQuick doesn't serve, so it says so (and
+suggests the nearest things it does have) rather than showing you an X-ray
+plot that answers a different question.
+
+---
+
+## While it's fetching
+
+Archives are slow and uneven — SWPC's realtime feed answers in under a second,
+while a 2017 file from NOAA NCEI can take half a minute. So the app tells you
+what it's doing rather than leaving you with a spinner:
+
+- **what it understood** — the interpretation and the exact UT window;
+- **what it's fetching** — one row per source, with the option it chose
+  (*"SDO images · AIA 193 Å"*);
+- **how long each is taking, against how long it usually takes** —
+  *"12 s / ~3.3 s"* tells you the archive is being slow today, not that
+  something has broken. Those typical times are measured on your machine and
+  get better with use (`~/.cache/solarapp/timings.json`; `SOLARQUICK_TIMINGS=0`
+  turns the learning off);
+- **which sources are already done**, ticked off as they land — a result that
+  arrives early doesn't wait for the slowest one to be reported;
+- **which source failed and why**, kept on screen after the rest have drawn.
 
 ---
 
@@ -421,21 +490,35 @@ One file, no registration:
 
 ```python
 # solarapp/sources/my_instrument.py
-from solarapp.core.registry import DataSource, PlotSpec
+from solarapp.core.registry import DataSource, PlotSpec, Variable
 
 class MyInstrument(DataSource):
     name = "my_instrument"
     display_name = "My Instrument"
-    keywords = ["myinst", "my instrument"]
+    keywords = ["myinst", "my instrument"]      # what routes a query here
+    coverage = ("2015-03-01", None)             # first light, last light
+    summary_rank = 50                           # join the bare-date overview
+    variables = [                               # the options inside it
+        Variable("blue", "Blue channel 430 nm", ["blue", "430", "43 nm"]),
+        Variable("red", "Red channel 656 nm", ["red", "656", "h alpha"]),
+    ]
 
     def fetch(self, start, end, **extras) -> PlotSpec:
-        ...
+        ...   # extras == {"channel": "blue"} for "myinst blue yesterday"
 ```
 
-Drop it in `solarapp/sources/` and it's auto-discovered; the query parser learns
-its keywords automatically. Copy `solarapp/sources/goes_xrs.py` as a template
-and read [`ARCHITECTURE.md`](ARCHITECTURE.md) — that plus `core/registry.py` is
-the whole mental model.
+Drop it in `solarapp/sources/` and it's auto-discovered — and everything else
+learns it from those four declarations. The parser routes `myinst` *and*
+`h alpha` to it; the spell-checker accepts typos of both; `430` is stripped
+before dates are read, so `myinst 430 on 10 July` keeps its day; a request
+outside `coverage` is refused before any network call, and the overview
+silently skips it for dates it wasn't observing; `aia 171, blue and red` knows
+the last two belong to whichever instrument was named; and `/api/sources`
+publishes the option list. No parser, UI or server code to touch.
+
+Copy `solarapp/sources/goes_xrs.py` as a template and read
+[`ARCHITECTURE.md`](ARCHITECTURE.md) — that plus `core/registry.py` is the whole
+mental model.
 
 Please verify an archive's API by hand before writing a plugin against it;
 several have moved or lag, and `ARCHITECTURE.md` records the traps.

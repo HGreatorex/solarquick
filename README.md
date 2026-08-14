@@ -169,6 +169,21 @@ euvs yesterday
 goes-16 euvs lyman alpha 2023-01-01
 ```
 
+**Historical GOES** reaches back well before the GOES-R satellites, from the
+NOAA NCEI science archive:
+```
+euvs 2014-06-10                       # GOES 13-15 EUVS, from 2010
+goes-14 euvs 2015-06-01               # the standby spacecraft, by name
+goes xrs high resolution 2014-06-10   # 2 s XRS instead of 1-min averages
+goes-12 xrs 2003-10-28                # pick the spacecraft yourself
+```
+Two things are worth knowing about this era. **Pre-2017 EUVS is Lyman-α
+only** — the archive's 30.4 nm channel exists but every value in it is empty,
+so for 30.4 nm before 2017 use SDO EVE. And the NCEI **science-quality XRS
+fluxes are true irradiances**, roughly 1.4–1.5× the SWPC-scaled values the
+GOES flare classes were defined on, so the A/B/C/M/X bands on the plot
+overstate a pre-2017 flare's class by about half a letter step.
+
 **Images**
 ```
 sdo aia 304 yesterday

@@ -107,6 +107,9 @@ _GRAMMAR_WORDS = {
     "flare", "flares", "class", "biggest", "largest", "strongest", "powerful",
     "above", "over", "show", "plot", "display", "give", "data", "please",
     "quicklook", "position", "positions", "where", "spectrum", "spectra",
+    # cadence words: read by GOES XRS's parse_extras, so they must be known
+    # here too or _autocorrect would "fix" them into something else
+    "high", "full", "resolution", "res", "cadence", "second", "seconds",
 }
 # Below this length, edit distance is not evidence: the instrument acronyms
 # are dense (sot/sdo, eve/eui/eit are one or two edits apart), so a typo'd

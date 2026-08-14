@@ -1,8 +1,9 @@
-"""Small helpers shared by sunpy/Fido-backed timeseries plugins."""
+"""Small helpers shared by the timeseries plugins (mostly sunpy/Fido-backed)."""
 from __future__ import annotations
 
 import math
 import os
+import re
 from datetime import datetime
 
 # parfive defaults to no total timeout and a 90 s socket read, so a stalled
@@ -35,6 +36,34 @@ def check_mission_span(start: datetime, end: datetime, span_start: str,
         s1 = datetime.fromisoformat(span_end).replace(tzinfo=start.tzinfo)
         if start > s1:
             raise RuntimeError(f"{mission} stopped observing on {span_end}.")
+
+
+# A satellite number written after "goes" is only a satellite when the number
+# isn't the start of a date: "goes 10 july 2014" asks for 10 July on the primary
+# spacecraft, not for GOES-10, and consuming "goes 10" there would strip the day
+# before the date parser ever saw it — silently widening the request to a whole
+# month. So a following month name (or ordinal suffix) disqualifies the match.
+_MONTH_WORD = r"jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec"
+_SAT_RE = re.compile(
+    rf"\bgoes[-\s]?(\d{{1,2}})\b(?!\s*(?:st|nd|rd|th)\b)(?!\s*(?:{_MONTH_WORD}))",
+    re.I,
+)
+
+
+def satellite_in_query(query: str, low: int, high: int) -> tuple[int | None, str | None]:
+    """Read an explicit GOES spacecraft out of a query: "goes-15", "goes 15".
+
+    Returns (number, matched_text) so the caller can pass the number to fetch()
+    and hand the text back as a consumed token. Numbers outside [low, high] are
+    ignored rather than raising: each GOES instrument flew on its own subset of
+    the fleet, and a number this source cannot serve is more likely part of the
+    date than a request for a spacecraft that never carried the instrument.
+    """
+    for m in _SAT_RE.finditer(query):
+        number = int(m.group(1))
+        if low <= number <= high:
+            return number, m.group(0)
+    return None, None
 
 
 def pick_satellite(query):

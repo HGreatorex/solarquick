@@ -39,6 +39,13 @@ def d(y, m, dd):
     ("goes-16 euvs lyman alpha 2023-01-01", "goes_euvs",
      {"satellite": 16, "channel": "irr_1216"}),
     ("euvs mg ii yesterday", "goes_euvs", {"channel": "MgII_standard"}),
+    ("euvs 2014-06-10", "goes_euvs", {}),
+    ("goes-14 euvs 2015-06-01", "goes_euvs", {"satellite": 14}),
+    ("goes xrs high resolution 2014-06-10", "goes_xrs", {"resolution": "flx1s"}),
+    ("goes xrs hi-res 2003-10-28", "goes_xrs", {"resolution": "flx1s"}),
+    ("goes-13 xrs 2014-03-01", "goes_xrs", {"satellite": 13}),
+    ("goes-12 xrs high cadence 2003-10-28", "goes_xrs",
+     {"satellite": 12, "resolution": "flx1s"}),
     ("eve he ii 304 yesterday", "sdo_eve", {"line_ion": "He II", "line_nm": 30.4}),
     ("eve 30.4 nm yesterday", "sdo_eve", {"line_nm": 30.4}),
     ("sdo eve spectrum 2026-08-05", "sdo_eve", {}),
@@ -86,6 +93,51 @@ def test_euvs_primary_satellite():
     assert primary_satellite(d(2016, 1, 1)) is None
     assert primary_satellite(d(2020, 6, 1)) == 16
     assert primary_satellite(d(2026, 8, 1)) == 19
+
+
+# -- legacy GOES 13-15 archives ------------------------------------------
+
+
+def test_euvs_legacy_satellite():
+    from solarapp.sources.goes_euvs import legacy_satellite
+    assert legacy_satellite(d(2009, 1, 1)) is None      # before any L2 EUVS
+    assert legacy_satellite(d(2009, 10, 1)) == 14       # GOES-14 campaigns only
+    assert legacy_satellite(d(2014, 6, 10)) == 15       # GOES-15 once it is up
+
+
+def test_euvs_before_legacy_coverage_is_refused():
+    with pytest.raises(RuntimeError, match="starts 2009-09-01"):
+        REG.get("goes_euvs").fetch(d(2005, 1, 1), d(2005, 1, 2))
+
+
+def test_euvs_legacy_has_no_304():
+    """The pre-2017 L2 archive populates Lyman-alpha only; say so, don't fetch."""
+    with pytest.raises(RuntimeError, match="Lyman"):
+        REG.get("goes_euvs").fetch(d(2014, 6, 10), d(2014, 6, 11), channel="irr_304")
+
+
+def test_euvs_named_legacy_satellite_beats_the_date():
+    """GOES-15 EUVS ran to 2020, three years into the GOES-R era."""
+    with pytest.raises(RuntimeError, match="stopped observing"):
+        REG.get("goes_euvs").fetch(d(2021, 6, 1), d(2021, 6, 2), satellite=15)
+
+
+def test_goes_satellite_number_is_not_eaten_from_a_date():
+    """"goes 10 july 2014" is a day of the month, not GOES-10."""
+    p = parse("goes xrs 10 july 2014", REG)
+    assert p.ok and p.extras == {}
+    assert p.start == d(2014, 7, 10)
+    p = parse("euvs goes 16 july 2018", REG)
+    assert p.ok and p.extras == {}
+    assert p.start == d(2018, 7, 16)
+
+
+def test_hires_words_survive_the_spell_corrector():
+    for q in ["goes xrs high resolution 2014-06-10", "xrs full cadence 2014-06-10"]:
+        p = parse(q, REG)
+        assert p.ok and p.corrections == [], (q, p.corrections)
+        assert p.extras == {"resolution": "flx1s"}
+        assert p.start == d(2014, 6, 10)
 
 
 def test_waves_max_days():

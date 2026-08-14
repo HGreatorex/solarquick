@@ -32,8 +32,10 @@ solarapp/
 │   │   ├── tsutil.py        ← mission-span guard, df→series, clip, downsample
 │   │   └── fetchcache.py    ← ~/.cache/solarapp download cache + dir listings
 │   ├── sources/
-│   │   ├── goes_xrs.py      ← GOES XRS (NCEI archive via Fido, SWPC JSON for recent)
-│   │   ├── goes_euvs.py     ← GOES EUVS lines + MgII (NCEI netCDF; primary-sat default)
+│   │   ├── goes_xrs.py      ← GOES XRS (NCEI archive via Fido, SWPC JSON for recent;
+│   │   │                       avg1m or flx1s, any spacecraft back to GOES-8)
+│   │   ├── goes_euvs.py     ← GOES EUVS lines + MgII (NCEI netCDF; primary-sat default;
+│   │   │                       GOES 13-15 Lyman-α backend for pre-2017)
 │   │   ├── sdo_images.py    ← SDO AIA/HMI images via Helioviewer
 │   │   ├── sdo_eve.py       ← SDO EVE L2B lines & spectra (LASP)
 │   │   ├── soho_images.py   ← SOHO EIT + LASCO C2/C3 via Helioviewer
@@ -178,6 +180,35 @@ ordinary multi-source request.
 - **NCEI archive latency**: GOES XRS science files appear on NOAA NCEI days after
   observation. The plugin uses SWPC's realtime 7-day JSON for recent times; there can
   be a gap (~7 days to ~2 weeks old) where neither has data yet.
+- **NCEI's science-quality XRS fluxes are not SWPC's flux.** The reprocessed
+  files are true irradiances; SWPC's operational values (and therefore the
+  A–X flare classes) carry the historical 0.7/0.85 scaling. Measured on the
+  2014-06-10 X2.2: science-quality XRS-B peaks at 3.3e-4, i.e. an "X3.3",
+  ~1.5× its catalogue class. `FLARE_BANDS` is drawn in operational units, so
+  for pre-GOES-R dates the bands locate a flare correctly but overstate its
+  class. This predates the flx1s work — the avg1m backend has always served
+  the same science files — but do not quote a class off the figure.
+- **The pre-2017 EUVS L2 archive is Lyman-α only.** `geuv-l2-ir10s` declares
+  `irr_304_1nm` and `irr_chanB`, and *every value in them is fill* — verified
+  across GOES-14 and GOES-15 files from 2009, 2010, 2012, 2014, 2016 and 2019.
+  Only channel E (121–122 nm) was reduced. Don't add a 30.4 nm series there on
+  the strength of the variable existing; the request is refused with a pointer
+  to SDO EVE instead.
+- **Legacy EUVS is a 1-nm band, GOES-R EUVS is a line.** The legacy variable
+  is `irr_1216_1nm` (121–122 nm); GOES-R's `irr_1216` is the Lyman-α line
+  itself. They happen to sit within a few percent of each other, and both
+  archives store *observed* irradiance with a separate `au_factor` for 1-AU
+  normalisation, so a curve crossing 2017 is continuous in convention — but
+  the two are not the same quantity and the legacy series is labelled as the
+  band it is.
+- **GOES-14 is a standby spacecraft**: its EUVS coverage is scattered
+  campaigns (2009, 2010, 2012, 2015–2020), not a span, so it is offered by
+  name and never chosen by default. GOES-15 (2010-03-25 – 2020-03-04) is.
+- **A number after "goes" is usually a date, not a satellite.**
+  `tsutil.satellite_in_query` refuses to read one when a month name or an
+  ordinal suffix follows, because consuming "goes 10" out of "goes 10 july
+  2014" strips the day before the date parser sees it and silently widens the
+  request to a whole month.
 - **Times are UTC everywhere.** Parser assumes day-first for ambiguous dates (10/07/2026 = 10 July).
 - **sunpy caches downloads** in `~/sunpy/data` — repeat queries are fast, disk grows.
 - **Parser is keyword-based**: unknown phrasings fail gracefully with a "did you mean"
@@ -228,7 +259,8 @@ ordinary multi-source request.
   2002-02-12–2018-04-11; Hinode SOT 2006-10-25–2016-02-25 (campaign-based,
   many empty days); EVE MEGS-A (λ ≲ 33 nm) lost 2014-05-26, MEGS-B at reduced
   duty cycle; GOES-R EUVS from 2017-02-07 (GOES-16), GOES-19 primary from
-  2025-04-07.
+  2025-04-07; legacy GOES EUVS 2009-09-01 (GOES-14) / 2010-03-25 (GOES-15)
+  through 2020-03-04.
 - **Fermi GBM is an all-sky monitor**: detector choice matters (default n5,
   override "gbm n3 ..."), solar pointing not guaranteed.
 - **High-cadence series are mean-downsampled** (~3000 points/series) before
@@ -281,6 +313,12 @@ ordinary multi-source request.
   filmstrip metadata resolved in parallel with thumbnail-sized frames; result
   cache with recency-aware TTL; one pooled HTTP session plus a rolling-feed
   cache; bounded parfive timeouts.
+- v1.2 (this build): the pre-GOES-R archives. GOES EUVS gains a GOES 13-15
+  backend (NCEI `geuv-l2-ir10s`, 10.24 s, Lyman-α only) so "euvs 2014-06-10"
+  answers instead of erroring, and GOES XRS gains the high-resolution science
+  irradiance product (`gxrs-l2-irrad_science`, 1–3 s depending on spacecraft,
+  via Fido's `flx1s`) plus explicit satellite choice back to GOES-8. Both
+  mean-bin for the browser and disclose the binning in exports.
 - next: hosted deploy — but see the note in the handoff section: local install
   is the recommended distribution route, and the LLM layer does not require
   hosting.
@@ -289,7 +327,7 @@ ordinary multi-source request.
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (193, all offline — external APIs are never
+template. Tests: `pytest tests/` (269, all offline — external APIs are never
 called from the suite).
 
 **Verify external APIs live before writing a plugin.** Several archives have

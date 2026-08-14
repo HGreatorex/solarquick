@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "solarquick"
-version = "1.1.0b1"
+version = "1.1.0b2"
 description = "Quicklook browser for solar physics data — type a plain-English request, get a plot"
 readme = "README.md"
 license = "MIT"
@@ -19,7 +19,12 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "sunpy[net,timeseries]>=5.0",
+    # `visualization` looks unnecessary — nothing here calls sunpy's plotting —
+    # but sunpy 8's timeseries package imports sunpy.visualization at module
+    # level, so without mpl-animators every sunpy-backed source (GOES archival
+    # XRS, RHESSI, LYRA, EVE, GBM, SOT) dies with "No module named
+    # 'mpl_animators'" at fetch time.
+    "sunpy[net,timeseries,visualization]>=5.0",
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "python-dateutil>=2.8",

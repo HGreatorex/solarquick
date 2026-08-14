@@ -132,3 +132,18 @@ def test_duplicate_frames_still_deduped_when_resolved_in_parallel(monkeypatch):
     )
     spec = SdoImages().fetch(d(2026, 7, 10), d(2026, 7, 11), channel="aia_304")
     assert len(spec["images"]) == 1
+
+
+def test_frame_timestamps_are_parseable(monkeypatch):
+    """The offset used to be appended to an already tz-aware isoformat,
+    giving every exported frame an unparseable "...+00:00+00:00"."""
+    from solarapp.core.helioviewer import HelioviewerImageSource
+
+    # one distinct image id per sample time, so no frame is deduped as a gap
+    monkeypatch.setattr(HelioviewerImageSource, "_closest_image",
+                        lambda self, t, sid: (t, t.isoformat()))
+    spec = SdoImages().fetch(d(2026, 8, 1), d(2026, 8, 2), channel="aia_193")
+
+    assert len(spec["images"]) == MAX_FRAMES
+    for frame in spec["images"]:
+        assert datetime.fromisoformat(frame["time"]).tzinfo is not None

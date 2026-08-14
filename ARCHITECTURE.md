@@ -75,7 +75,26 @@ class MySource(DataSource):
     # Returns (extras, consumed_tokens); consumed tokens are stripped before
     # date parsing (so "aia 171" doesn't feed 171 to the date parser).
     def parse_extras(self, query: str) -> tuple[dict, list[str]]: ...
+    # optional: override how strongly a query asks for this source. The default
+    # sums the lengths of the keywords that matched; override only for context
+    # a flat list can't express (Wind/WAVES withdraws its bare "wind" when the
+    # query says "solar wind"; Positions outranks EUI on "where is solar
+    # orbiter"). Do NOT use it to break a genuine tie — see below.
+    def score(self, text: str) -> int: ...
 ```
+
+**Keyword matching** (`registry.keyword_regex`) treats internal hyphens,
+slashes and spaces as interchangeable and optional, and allows a trailing
+plural `s`. One keyword `"x-ray"` therefore covers `x-ray`, `x ray`, `xray`,
+`x-rays` and `xrays`; keyword lists stay short and spelling variants are the
+matcher's problem, not the plugin author's. Write the keyword in its most
+separated form (`"proba 2"`, not `"proba2"`) so every spelling folds into it.
+
+**Ties are questions, not defaults.** When several sources share the top score
+the parser returns an error naming all of them instead of picking one — `euv`
+really does belong to AIA, EIT, EUI, SWAP, EVE and EUVS, and load order is not
+an answer. Adding a broad keyword to several sources is therefore safe: naming
+an instrument breaks the tie by scoring higher.
 
 **Export** (`core/export.py`, `POST /api/export`) turns one PlotSpec block into
 a CSV or JSON download. The browser posts back the spec it is already

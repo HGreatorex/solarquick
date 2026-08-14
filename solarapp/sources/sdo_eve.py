@@ -42,7 +42,7 @@ _WAVE_RE = re.compile(r"(?<![-/\d.])(\d{1,3}\.\d+|(?!19|20)\d{3,4}|\d{3})(?![-/\
 class SdoEve(DataSource):
     name = "sdo_eve"
     display_name = "SDO EVE (EUV irradiance: lines & spectra)"
-    keywords = ["eve", "sdo eve", "megs", "eve spectrum", "irradiance"]
+    keywords = ["eve", "sdo eve", "megs", "eve spectrum", "irradiance", "euv"]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
         ql = query.lower()

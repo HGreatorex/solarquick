@@ -15,6 +15,7 @@ Query examples: "positions today", "where is psp 2026-07-10",
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timedelta
 
 from solarapp.core.registry import DataSource, PlotSpec
@@ -52,15 +53,30 @@ def to_xy(lon_deg: float, r_au: float) -> tuple[float, float]:
     return r_au * math.cos(lon), r_au * math.sin(lon)
 
 
+_WHERE_IS = re.compile(r"\bwhere\s+(?:is|are|was|were)\b", re.I)
+# Enough to outrank any instrument name that can follow the interrogative
+# (the longest keyword in the app is 17 characters).
+_INTERROGATIVE_BONUS = 24
+
+
 class Positions(DataSource):
     name = "positions"
     display_name = "Positions (planets & spacecraft)"
     keywords = [
-        "positions", "position", "where", "where is", "synoptic",
+        "position", "where", "where is", "synoptic",
         "constellation", "ephemeris", "solar system", "spacecraft",
         "psp", "parker", "parker solar probe", "bepicolombo", "bepi",
-        "stereo", "stereo-a", "planets",
+        "stereo", "planets",
     ]
+
+    def score(self, text: str) -> int:
+        s = super().score(text)
+        if _WHERE_IS.search(text):
+            # "where is solar orbiter" asks for a location; without this it
+            # ties exactly with EUI's "solar orbiter" and the answer would
+            # depend on plugin load order.
+            s += _INTERROGATIVE_BONUS
+        return s
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         from astropy.time import Time

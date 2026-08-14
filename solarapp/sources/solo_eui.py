@@ -34,7 +34,7 @@ CHANNELS = {
 class SoloEui(HelioviewerImageSource):
     name = "solo_eui"
     display_name = "Solar Orbiter EUI (FSI / HRI)"
-    keywords = ["eui", "fsi", "hri", "solar orbiter", "solo"]
+    keywords = ["eui", "fsi", "hri", "solar orbiter", "solo", "euv"]
     channels = CHANNELS
     default_channel = "fsi_174"
 

@@ -30,9 +30,14 @@ FLARE_BANDS = [
 class GoesXRS(DataSource):
     name = "goes_xrs"
     display_name = "GOES XRS (soft X-ray flux)"
+    # keyword matching is tolerant of hyphens, spaces and plurals (see
+    # registry.keyword_regex), so "x-ray" alone covers "xray", "x rays", ...
+    # A bare "x-ray" belongs here rather than to RHESSI/STIX/GBM: in solar
+    # physics "the X-ray light curve" means GOES unless a band is named, and
+    # those sources outscore this one whenever theirs is ("hard x-ray", "stix").
     keywords = [
-        "goes xrs", "goes sxr", "goes x-ray", "goes xray",
-        "goes", "xrs", "sxr", "soft x-ray", "x-ray flux",
+        "goes xrs", "goes sxr", "goes x-ray",
+        "goes", "xrs", "sxr", "soft x-ray", "x-ray", "x-ray flux",
     ]
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:

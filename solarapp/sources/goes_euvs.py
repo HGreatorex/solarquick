@@ -64,7 +64,7 @@ class GoesEuvs(DataSource):
     # channel words (mg ii, lyman alpha) deliberately aren't keywords: they
     # select a channel via parse_extras once "euvs" has routed here, and they
     # would otherwise hijack queries meant for EVE or EUI Lyman-α.
-    keywords = ["euvs", "goes euvs", "euv sensor"]
+    keywords = ["euvs", "goes euvs", "euv sensor", "euv"]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
         ql = query.lower()

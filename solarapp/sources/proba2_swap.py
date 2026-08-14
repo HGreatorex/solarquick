@@ -18,6 +18,8 @@ CHANNELS = {
 class Proba2Swap(HelioviewerImageSource):
     name = "proba2_swap"
     display_name = "PROBA2 SWAP (EUV imager)"
-    keywords = ["swap", "proba2", "proba-2", "proba 2"]
+    # "proba 2" also matches "proba-2" and "proba2" — the matcher treats
+    # internal separators as optional (see registry.keyword_regex)
+    keywords = ["swap", "proba 2", "euv"]
     channels = CHANNELS
     default_channel = "swap_174"

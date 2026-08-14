@@ -21,7 +21,7 @@ DEFAULT_DETECTOR = "n5"
 class FermiGbm(DataSource):
     name = "fermi_gbm"
     display_name = "Fermi GBM (X-ray/gamma lightcurves)"
-    keywords = ["fermi", "gbm", "fermi gbm"]
+    keywords = ["fermi", "gbm", "fermi gbm", "gamma ray", "gamma-ray burst"]
 
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
         m = re.search(r"\b(n[0-9ab])\b", query.lower())

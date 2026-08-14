@@ -17,7 +17,7 @@ from solarapp.core.tsutil import check_mission_span, clip_df, df_to_series, down
 class Rhessi(DataSource):
     name = "rhessi"
     display_name = "RHESSI (hard X-ray count rates)"
-    keywords = ["rhessi", "hard x-ray", "hxr"]
+    keywords = ["rhessi", "hard x-ray", "hxr"]  # hyphen/plural variants are handled by the matcher
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         check_mission_span(start, end, "2002-02-12", "2018-04-11", "RHESSI")

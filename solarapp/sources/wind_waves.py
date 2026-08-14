@@ -31,15 +31,26 @@ RECEIVERS = [
 ]
 
 
+_SOLAR_WIND = re.compile(r"\bsolar\s*wind\b", re.I)
+_WIND = re.compile(r"\bwind\b", re.I)
+
+
 class WindWaves(DataSource):
     name = "wind_waves"
     display_name = "Wind/WAVES (radio spectra)"
-    # deliberately no bare "wind": it matched "solar wind speed/density" and
-    # silently returned radio spectra for a plasma-velocity request. In solar
-    # physics "solar wind" is the plasma stream, not this spacecraft.
-    keywords = ["waves", "wind waves", "wind/waves", "wind spacecraft",
-                "radio spectrum", "radio spectra",
-                "type ii", "type iii", "radio burst"]
+    # "wind" on its own is the spacecraft — but "solar wind" is the plasma
+    # stream, a quantity this app does not serve, so the bare keyword is
+    # withdrawn in that context by score() below rather than dropped entirely.
+    # "radio" is unambiguous here: WAVES is the only radio source installed.
+    keywords = ["wind", "waves", "wind waves", "wind spacecraft",
+                "radio", "radio spectrum", "radio spectra", "radio emission",
+                "dynamic spectrum", "type ii", "type iii", "radio burst"]
+
+    def score(self, text: str) -> int:
+        s = super().score(text)
+        if s and _WIND.search(text) and _SOLAR_WIND.search(text):
+            s -= len("wind")  # "solar wind speed" must not land here
+        return max(s, 0)
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         if end - start > timedelta(days=MAX_DAYS):

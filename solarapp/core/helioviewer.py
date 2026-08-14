@@ -84,7 +84,9 @@ class HelioviewerImageSource(DataSource):
             seen_ids.add(img_id)
             max_gap_h = max(max_gap_h, abs((actual - t).total_seconds()) / 3600)
             frames.append({
-                "time": actual.isoformat() + "+00:00",
+                # already tz-aware: appending an offset produced the
+                # unparseable "...T09:59:53+00:00+00:00" in every JSON export
+                "time": actual.isoformat(),
                 "url": self._screenshot_url(actual, channel, crop),
                 "thumb_url": self._screenshot_url(actual, channel, crop, px=THUMB_PX),
                 "caption": f"{channel['label']}  {actual:%Y-%m-%d %H:%M:%S} UT",

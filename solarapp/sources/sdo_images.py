@@ -5,6 +5,8 @@ Query examples: "sdo aia 304 yesterday", "aia 171 on 10 July 2026",
 """
 from __future__ import annotations
 
+import re
+
 from solarapp.core.helioviewer import HelioviewerImageSource, match_wavelength
 
 AIA_WAVELENGTHS = [94, 131, 171, 193, 211, 304, 335, 1600, 1700, 4500]
@@ -35,7 +37,7 @@ class SdoImages(HelioviewerImageSource):
     display_name = "SDO images (AIA / HMI)"
     keywords = [
         "sdo", "aia", "hmi", "magnetogram", "continuum",
-        "solar image", "sun image", "euv image",
+        "solar image", "sun image", "euv", "euv image",
     ]
     channels = CHANNELS
     default_channel = "aia_171"
@@ -49,4 +51,8 @@ class SdoImages(HelioviewerImageSource):
         wl = match_wavelength(ql, AIA_WAVELENGTHS)
         if wl is not None:
             return {"channel": f"aia_{wl}"}, [str(wl)]
+        # "hmi yesterday" named an instrument that has no EUV channel, so
+        # falling through to the AIA default would answer a different question
+        if re.search(r"\bhmi\b", ql):
+            return {"channel": "hmi_magnetogram"}, []
         return {"channel": "aia_171"}, []

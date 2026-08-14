@@ -36,7 +36,7 @@ CHANNELS["lasco_c3"] = {
 class SohoImages(HelioviewerImageSource):
     name = "soho_images"
     display_name = "SOHO images (EIT / LASCO)"
-    keywords = ["soho", "eit", "lasco", "coronagraph", "cme"]
+    keywords = ["soho", "eit", "lasco", "coronagraph", "cme", "euv"]
     channels = CHANNELS
     default_channel = "eit_195"
 

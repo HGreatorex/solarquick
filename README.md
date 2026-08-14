@@ -215,8 +215,26 @@ day night map from 2026-06-01 to 2026-07-01
 
 **Time can be written** as a date (`2026-07-10`, `10 July 2026`), a range
 (`from 2026-07-01 to 2026-07-08`), a month (`july 2026`), a year (`2024`),
-`today` / `yesterday`, `last 3 days`, `past 2 weeks`, `since 2014`, or a day
-plus a time (`yesterday at 14:30`).
+`today` / `yesterday`, `now`, `latest`, `3 days ago`, `this week`,
+`this month`, `last 3 days`, `past 2 weeks`, or `since 2014`.
+
+**A time of day narrows any single day**, in whichever way you write it:
+```
+aia 171 yesterday at 14:30
+aia 193 on 2026-08-01 between 10:00 and 12:00
+aia 304 today 10am-2pm
+goes xrs 2026-07-10 14:00 to 15:30
+lasco c3 2026-08-01 around 09:00
+goes 2003-10-28 22:00 to 02:00      # crossing midnight is understood
+```
+
+**Everyday wording works**, not just instrument names — `xrays yesterday`
+finds GOES XRS, `radio today` finds Wind/WAVES. Hyphens, spaces and plurals
+don't matter: `x-ray`, `x ray`, `xray` and `xrays` are all the same word.
+
+**Ambiguous terms are questioned, not guessed.** `euv today` could be five
+different instruments, so SolarQuick lists them and asks which you meant
+rather than picking one.
 
 **Typos are tolerated.** `goess xsr yesterdy` works, and SolarQuick tells you
 what it read your query as rather than silently guessing.
@@ -307,6 +325,19 @@ prints.
 **"No data source recognised"**
 The query didn't match a known instrument. The message lists what's available.
 Check the [examples above](#what-you-can-ask-for).
+
+**"could mean several instruments"**
+Not an error either — the term you used belongs to more than one instrument
+(`euv` is on AIA, EIT, EUI, SWAP, EVE and EUVS). Name the one you want.
+SolarQuick asks rather than picking, so it can't quietly plot the wrong thing.
+
+**`No module named 'mpl_animators'`**
+An install from before this dependency was declared. Update and reinstall:
+```bash
+git pull && pip install --upgrade .
+```
+It affects every sunpy-backed source (archival GOES XRS, RHESSI, LYRA, EVE,
+Fermi GBM, Hinode SOT); image sources are unaffected.
 
 **"No GOES XRS files found on NCEI for this interval"**
 Usually the archive, not you — NCEI lags real time and is intermittently

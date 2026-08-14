@@ -41,7 +41,7 @@ from datetime import datetime
 
 from . import summary as summary_view
 from . import timegrammar as tg
-from .registry import Registry, keyword_regex
+from .registry import Registry
 
 # conjunctions that separate one requested source from the next
 _CONJ = re.compile(

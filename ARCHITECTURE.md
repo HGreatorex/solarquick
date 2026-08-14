@@ -309,6 +309,24 @@ ordinary multi-source request.
   every unsupported instrument that shows the same thing.
 - **A weekday abbreviation list must exclude "sat" and "sun."** In this app
   they are a satellite and the star far more often than Saturday and Sunday.
+- **An unspaced hyphen is part of a date, not a range separator.** `wind
+  8-may-2024` split into "8" and "may-2024" and was read as May 2024 through
+  the end of that year — a single-day query that became eight months. Reported
+  from the field, and the class of bug is worth naming: *a range rule is a
+  widening rule*, so anything it accepts as a separator must be something no
+  date contains. Word separators (`to`, `until`, `and`) and dashes with spaces
+  around them qualify; a bare `-` does not. The one place an unspaced hyphen is
+  still allowed is `10-12 july`, where the right-hand side must lead with a day
+  number — which is exactly what `8-may-2024` does not.
+- **An over-long request is usually a misread date.** `tsutil.check_max_days`
+  quotes the window it understood, because "limited to 2 days" told the user
+  nothing about the fact that their one day had become eight months. When a
+  limit fires, the interpretation is the diagnosis.
+- **A plugin's `fetch` is never run by the suite**, so a missing import
+  survives every test and appears as a NameError in front of a user, usually on
+  an error branch. `tests/test_sources_static.py` reads each plugin's bytecode
+  and asserts every global it loads exists — cheap, and it catches the one
+  mistake this architecture makes easy.
 - **Typos are fixed by retry, not looser matching.** `_autocorrect` rewrites
   only tokens absent from the vocabulary (keyword words + date/grammar words),
   then the query is parsed again; corrections are reported to the user via
@@ -431,7 +449,7 @@ ordinary multi-source request.
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (354, all offline — external APIs are never
+template. Tests: `pytest tests/` (389, all offline — external APIs are never
 called from the suite, and a test that quietly starts doing so shows up as a
 suite that takes twenty seconds instead of one).
 

@@ -127,6 +127,26 @@ def _error_hint(error) -> str:
     return type(exc).__name__ if exc is not None else "unknown cause"
 
 
+def check_max_days(start: datetime, end: datetime, max_days: int, what: str) -> None:
+    """Refuse an over-long request, and say what window was understood.
+
+    The span is quoted because a too-long request is often a *misread* date
+    rather than a greedy user: "wind 8-may-2024" once parsed as May through
+    December, and the bare message "limited to 2 days" gave no hint that the
+    single day asked for had become eight months. An error that states the
+    interpretation lets the reader see the real fault at a glance.
+    """
+    days = (end - start).total_seconds() / 86400
+    if days <= max_days:
+        return
+    raise RuntimeError(
+        f"{what} requests are limited to {max_days} days, and this query was "
+        f"read as {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT "
+        f"({days:.1f} days). If that is not the window you meant, the date was "
+        f"misread — an ISO date like 2024-05-08 is never ambiguous."
+    )
+
+
 def band_numbers(name: str) -> list[int]:
     """The energy limits written into a band label ("6 - 12 keV" → [6, 12])."""
     return [int(n) for n in re.findall(r"\d+", name)]

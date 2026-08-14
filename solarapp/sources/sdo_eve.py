@@ -24,6 +24,7 @@ import numpy as np
 
 from solarapp.core.fetchcache import cached_download, listing
 from solarapp.core.registry import DataSource, PlotSpec, Variable
+from solarapp.core.tsutil import check_max_days
 
 LASP = "https://lasp.colorado.edu/eve/data_access/eve_data/products/level2b"
 MAX_LINE_DAYS = 7
@@ -116,8 +117,7 @@ class SdoEve(DataSource):
     def _fetch_line(self, start, end, ion, nm) -> PlotSpec:
         from astropy.io import fits
 
-        if end - start > timedelta(days=MAX_LINE_DAYS):
-            raise RuntimeError(f"EVE line requests are limited to {MAX_LINE_DAYS} days.")
+        check_max_days(start, end, MAX_LINE_DAYS, "EVE line")
 
         idx = None
         times: list[str] = []

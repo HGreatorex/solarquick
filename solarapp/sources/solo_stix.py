@@ -8,13 +8,11 @@ Query examples: "solar orbiter stix yesterday", "stix 2026-08-01".
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-import requests
+from datetime import datetime, timezone
 
 from solarapp.core import httpclient
 from solarapp.core.registry import DataSource, PlotSpec, Variable
-from solarapp.core.tsutil import select_bands
+from solarapp.core.tsutil import check_max_days, select_bands
 
 API = "https://datacenter.stix.i4ds.net/api/request/ql/lightcurves"
 MAX_DAYS = 7  # 4 s cadence; keep requests sane
@@ -43,8 +41,7 @@ class SoloStix(DataSource):
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         self.check_coverage(start, end)
-        if end - start > timedelta(days=MAX_DAYS):
-            raise RuntimeError(f"STIX quicklook requests are limited to {MAX_DAYS} days.")
+        check_max_days(start, end, MAX_DAYS, "STIX quicklook")
 
         r = httpclient.session().post(API, data={
             "begin": f"{start:%Y-%m-%dT%H:%M:%S}",

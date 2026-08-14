@@ -19,6 +19,7 @@ import numpy as np
 
 from solarapp.core.fetchcache import cached_download, listing
 from solarapp.core.registry import DataSource, PlotSpec, Variable
+from solarapp.core.tsutil import check_max_days
 
 SPDF = "https://spdf.gsfc.nasa.gov/pub/data/wind/waves"
 MAX_DAYS = 2          # 256 freqs x ~1800 sweeps/day/receiver
@@ -64,10 +65,7 @@ class WindWaves(DataSource):
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         self.check_coverage(start, end)
-        if end - start > timedelta(days=MAX_DAYS):
-            raise RuntimeError(
-                f"Wind/WAVES spectrogram requests are limited to {MAX_DAYS} days."
-            )
+        check_max_days(start, end, MAX_DAYS, "Wind/WAVES spectrogram")
         days = []
         d = start.replace(hour=0, minute=0, second=0, microsecond=0)
         while d < end:

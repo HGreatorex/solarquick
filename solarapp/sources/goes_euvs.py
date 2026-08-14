@@ -35,7 +35,8 @@ import numpy as np
 from solarapp.core.fetchcache import cached_download, listing
 from solarapp.core.registry import DataSource, PlotSpec, Variable
 from solarapp.core.tsutil import (
-    check_mission_span, clip_df, df_to_series, downsample_df, satellite_in_query,
+    check_max_days, check_mission_span, clip_df, df_to_series, downsample_df,
+    satellite_in_query,
 )
 
 NCEI = "https://data.ngdc.noaa.gov/platforms/solar-space-observing-satellites/goes"
@@ -139,8 +140,7 @@ class GoesEuvs(DataSource):
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         self.check_coverage(start, end)
-        if end - start > timedelta(days=MAX_DAYS):
-            raise RuntimeError(f"GOES EUVS requests are limited to {MAX_DAYS} days.")
+        check_max_days(start, end, MAX_DAYS, "GOES EUVS")
         sat = extras.get("satellite")
         channel = extras.get("channel")
 

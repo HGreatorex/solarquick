@@ -94,6 +94,23 @@ def test_a_trailing_plural_is_not_allowed_on_a_number():
     assert keyword_regex("x-ray").search("xrays yesterday")
 
 
+def test_an_over_long_request_says_what_window_it_understood():
+    """A too-long request is often a misread date, not a greedy user — so the
+    error quotes the span it read, which is what makes the misreading visible."""
+    from datetime import datetime, timezone
+
+    from solarapp.core.tsutil import check_max_days
+
+    start = datetime(2024, 5, 1, tzinfo=timezone.utc)
+    check_max_days(start, start, 2, "Wind/WAVES spectrogram")  # in range: silent
+    with pytest.raises(RuntimeError) as e:
+        check_max_days(start, datetime(2025, 1, 1, tzinfo=timezone.utc), 2,
+                       "Wind/WAVES spectrogram")
+    assert "limited to 2 days" in str(e.value)
+    assert "2024-05-01 00:00 – 2025-01-01 00:00 UT" in str(e.value)
+    assert "245.0 days" in str(e.value)
+
+
 def test_every_source_declares_a_coverage_that_parses():
     from datetime import datetime, timezone
 

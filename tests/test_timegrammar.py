@@ -109,6 +109,24 @@ def test_slash_and_dot_dates_are_day_first():
     assert span("goes xrs 10.07.26") == (d(2026, 7, 10), d(2026, 7, 11))
 
 
+def test_a_hyphenated_date_is_a_date_not_a_range():
+    """Reported from the field: "wind 8-may-2024" asked for one day and got
+    eight months, because the hyphen was read as a range separator and the
+    query became "May" → "2024". Wind/WAVES caught it on its 2-day limit;
+    "flares may-2024" would have returned eight months of catalogue in
+    silence."""
+    assert span("wind 8-may-2024") == (d(2024, 5, 8), d(2024, 5, 9))
+    assert span("lasco 28-oct-2003") == (d(2003, 10, 28), d(2003, 10, 29))
+    assert span("flares may-2024") == (d(2024, 5, 1), d(2024, 6, 1))
+    assert span("goes xrs 8-5-2024") == (d(2024, 5, 8), d(2024, 5, 9))
+
+
+def test_hyphenated_dates_still_range_when_a_range_is_written():
+    assert span("euvs 8-may-2024 to 10-may-2024") == (d(2024, 5, 8), d(2024, 5, 11))
+    # a *spaced* hyphen is a separator; an unspaced one is part of a date
+    assert span("flares 1-march-2024 - 5-march-2024") == (d(2024, 3, 1), d(2024, 3, 6))
+
+
 def test_natural_language_ranges():
     assert span("goes xrs from 10 july to 12 july 2026") == (d(2026, 7, 10), d(2026, 7, 13))
     assert span("goes xrs 10 to 12 july 2026") == (d(2026, 7, 10), d(2026, 7, 13))

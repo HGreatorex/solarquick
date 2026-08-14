@@ -298,28 +298,35 @@ def _step_back_a_year(text: str, span: tuple[datetime, datetime]
 # -- ranges written in words --------------------------------------------
 # A date-ish chunk: "10 July 2026", "July 2026", "10/07/26", "2014", "the 10th".
 _DATEISH = (
-    r"(?:\d{1,2}(?:st|nd|rd|th)?\s+)?"
+    # the day, month and year of one end may be joined by spaces or hyphens
+    # ("8 may 2024", "8-may-2024"), so that a hyphenated date is one date
+    r"(?:\d{1,2}(?:st|nd|rd|th)?[\s\-/]+)?"
     r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
     # the (?!\d) matters: without it "12 july 2026" reads "20" as the day of
     # the month and leaves "26" behind, so the range ends in the year 20
-    r"(?:\s+\d{1,2}(?:st|nd|rd|th)?(?!\d))?(?:,?\s+\d{4})?"
+    r"(?:[\s\-/]+\d{1,2}(?:st|nd|rd|th)?(?!\d))?(?:,?[\s\-/]+\d{4})?"
     r"|\d{1,2}[/.]\d{1,2}[/.]\d{2,4}"
     r"|(?:19|20)\d{2}(?!\d)"
     r"|\d{1,2}(?:st|nd|rd|th)"
 )
-_NATURAL_RANGE = re.compile(
-    rf"(?:from\s+|between\s+)?({_DATEISH})\s*(?:to|until|through|thru|and|–|—|-)\s*({_DATEISH})",
-    re.I,
-)
+# What may sit between the two ends of a range. A bare hyphen must be spaced:
+# unspaced, it is part of a date far more often than it is a range, and
+# "8-may-2024" used to split into "8" and "may-2024" — read as May 2024 through
+# the end of the year, an eight-month request from a single-day query.
+_SEPARATOR = r"(?:\s*(?:to|until|through|thru|and)\s*|\s*[–—]\s*|\s+-\s+)"
+_NATURAL_RANGE = re.compile(rf"(?:from\s+|between\s+)?({_DATEISH}){_SEPARATOR}({_DATEISH})", re.I)
 # "10 to 12 July 2026": a bare number is only a date when the other end
-# carries a month, which is what keeps "from 3 to 4pm" out of this rule.
-_MONTH_DATE = (
-    r"(?:\d{1,2}(?:st|nd|rd|th)?\s+)?"
+# carries a month, which is what keeps "from 3 to 4pm" out of this rule. Here
+# an unspaced hyphen is allowed ("10-12 july"), so the right-hand side must
+# lead with a day number — that is the whole difference between the range
+# "10-12 july" and the date "8-may-2024".
+_DAY_AND_MONTH = (
+    r"\d{1,2}(?:st|nd|rd|th)?\s+"
     r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
-    r"(?:\s+\d{1,2}(?:st|nd|rd|th)?(?!\d))?(?:,?\s+\d{4})?"
+    r"(?:,?\s+\d{4})?"
 )
 _NUMERIC_LEFT_RANGE = re.compile(
-    rf"\b(\d{{1,2}}(?:st|nd|rd|th)?)\s*(?:to|until|through|thru|–|—|-)\s*({_MONTH_DATE})",
+    rf"\b(\d{{1,2}}(?:st|nd|rd|th)?)\s*(?:to|until|through|thru|–|—|-)\s*({_DAY_AND_MONTH})",
     re.I,
 )
 

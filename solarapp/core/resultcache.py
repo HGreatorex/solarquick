@@ -86,6 +86,17 @@ class ResultCache:
             self.hits += 1
             return dict(spec)
 
+    def peek(self, key: str) -> bool:
+        """Is `key` cached and live? Counts as neither a hit nor a miss.
+
+        Used by the progress display to announce "cached" before the fetch
+        starts. It must not disturb the LRU order or the statistics, or
+        looking at the plan would change what the plan reports.
+        """
+        with self._lock:
+            found = self._entries.get(key)
+            return found is not None and time.monotonic() <= found[0]
+
     def put(self, key: str, spec: dict, end: datetime) -> None:
         try:
             # no `default=`: a spec that cannot round-trip as JSON is a plugin

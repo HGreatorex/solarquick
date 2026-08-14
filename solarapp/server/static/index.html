@@ -46,22 +46,50 @@
   .dl button:hover:not(:disabled) { color:#e6edf3; border-color:#8b949e; }
   .dl button:disabled { opacity:.45; cursor:default; }
   .dl .dlerr { color:#d29922; font-size:.78rem; margin-right:auto; }
+
+  /* progress: what is being fetched, how long it usually takes, how long so far */
+  #prog { margin:.8rem 0; display:none; }
+  #prog.on { display:block; }
+  .prog-head { color:#e6edf3; font-size:.9rem; margin-bottom:.15rem; }
+  .prog-when { color:#8b949e; font-size:.82rem; margin-bottom:.6rem; }
+  .prog-row { display:grid; grid-template-columns:1.1rem 1fr auto; gap:.5rem;
+              align-items:baseline; padding:.3rem 0; font-size:.87rem; }
+  .prog-row .mark { color:#8b949e; }
+  .prog-row.done .mark { color:#58d6a3; }
+  .prog-row.failed .mark { color:#ff7b72; }
+  .prog-row.queued { opacity:.55; }
+  .prog-row .what { color:#e6edf3; }
+  .prog-row .opts { color:#8b949e; }
+  .prog-row .t { color:#8b949e; font-variant-numeric:tabular-nums; font-size:.8rem; }
+  .prog-row .err { grid-column:2 / -1; color:#d29922; font-size:.8rem; }
+  .prog-bar { grid-column:2 / -1; height:3px; border-radius:2px; background:#21262d;
+              overflow:hidden; }
+  .prog-bar i { display:block; height:100%; background:#f0a832; width:0;
+                transition:width .12s linear; }
+  .prog-row.done .prog-bar i { background:#58d6a3; }
+  .prog-row.failed .prog-bar i { background:#ff7b72; }
+  /* no estimate yet: a sweep, so it reads as "working", not as "60% done" */
+  .prog-bar.unknown i { width:35% !important; animation:sweep 1.1s ease-in-out infinite; }
+  @keyframes sweep { 0% {margin-left:-35%;} 100% {margin-left:100%;} }
+  .spin { display:inline-block; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <h1>Solar<span>Quick</span></h1>
-<p class="hint">e.g. “goes sxr yesterday” · “sdo aia 304 and goes xrs yesterday” · “lasco c3 2026-08-01” · “stix and wind waves 2026-07-11” · “eve he ii 304 yesterday” · “euvs yesterday” · “rhessi 2003-10-28” · “positions today” · “terminator today” · “flares yesterday” · “biggest flare since 2014” · “x-class flares in july 2026”</p>
+<p class="hint">e.g. “xrays wednesday” · “2017-09-06” (a date on its own gives an overview) · “aia 171, 193 and 211 yesterday” · “goes xrs long channel last night” · “euvs he ii 2026-08-01” · “lasco c3 yesterday afternoon” · “rhessi 25-50 kev 2003-10-28” · “flares july to august 2014” · “biggest flare since 2014” · “positions today” · “terminator today”</p>
 <form id="f">
   <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
   <button id="go">Plot</button>
 </form>
 <div id="msg"></div>
+<div id="prog"></div>
 <div id="plot"></div>
 <div id="meta"></div>
 <script>
 const f = document.getElementById("f"), q = document.getElementById("q"),
       go = document.getElementById("go"), msg = document.getElementById("msg"),
-      meta = document.getElementById("meta");
+      meta = document.getElementById("meta"), prog = document.getElementById("prog");
 
 let currentQuery = "";  // recorded in export headers so a file says what made it
 
@@ -69,17 +97,157 @@ f.addEventListener("submit", async (e) => {
   e.preventDefault();
   msg.textContent = ""; meta.textContent = ""; go.disabled = true; go.textContent = "Fetching…";
   msg.style.color = ""; currentQuery = q.value;
+  // the previous figure goes now, not when the new one arrives: leaving it up
+  // under a progress list makes the old plot look like the new answer
+  plotDiv.innerHTML = "";
+  progress.begin(q.value);
   try {
-    const r = await fetch("/api/query", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({q: q.value})
-    });
-    const d = await r.json();
-    if (!r.ok) { msg.textContent = (d.errors || ["Request failed"]).join("\n"); return; }
-    render(d);
-  } catch (err) { msg.textContent = "Error: " + err; }
+    await runQuery(q.value);
+  } catch (err) { msg.textContent = "Error: " + err; progress.stop(); }
   finally { go.disabled = false; go.textContent = "Plot"; }
 });
+
+// -- running a query ---------------------------------------------------
+// The streaming endpoint reports each stage as it happens; the plain one is
+// kept as a fallback for browsers without a readable response body, and both
+// end in the same spec.
+
+async function runQuery(query) {
+  const r = await fetch("/api/query/stream", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({q: query}),
+  });
+  if (!r.body || !r.body.getReader) return runQueryPlain(query);
+
+  const reader = r.body.getReader(), decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const {value, done} = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, {stream: true});
+    const lines = buffer.split("\n");
+    buffer = lines.pop();                      // keep the partial line
+    for (const line of lines) if (line.trim()) handleEvent(JSON.parse(line));
+  }
+  if (buffer.trim()) handleEvent(JSON.parse(buffer));
+}
+
+async function runQueryPlain(query) {
+  const r = await fetch("/api/query", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({q: query}),
+  });
+  const d = await r.json();
+  handleEvent(r.ok ? {event: "result", spec: d}
+                   : {event: "error", errors: d.errors || ["Request failed"]});
+}
+
+function handleEvent(ev) {
+  if (ev.event === "parsed") progress.plan(ev);
+  else if (ev.event === "source_done") progress.finish(ev);
+  else if (ev.event === "result") { progress.stop(); render(ev.spec); }
+  else if (ev.event === "error") {
+    progress.stop();
+    msg.textContent = (ev.errors || ["Request failed"]).join("\n");
+  }
+}
+
+// -- the loading display -----------------------------------------------
+// Three things a spinner cannot say: what was understood, what is being
+// fetched, and whether this is taking longer than it usually does.
+
+const progress = (() => {
+  let rows = [], timer = null, parallel = 4;
+
+  const secs = ms => (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + " s";
+
+  function begin(query) {
+    rows = [];
+    prog.className = "on";
+    prog.innerHTML = `<div class="prog-head">Reading “${escapeHtml(query)}”…</div>
+                      <div class="prog-when"></div><div class="prog-rows"></div>`;
+  }
+
+  function plan(ev) {
+    parallel = ev.parallel || 4;
+    prog.querySelector(".prog-head").textContent = "Fetching";
+    prog.querySelector(".prog-when").textContent =
+      utc(ev.start) + " – " + utc(ev.end) + " UT" + (ev.note ? " · " + ev.note : "");
+    const box = prog.querySelector(".prog-rows");
+    box.innerHTML = "";
+    rows = ev.sources.map((s, i) => {
+      const el = document.createElement("div");
+      el.className = "prog-row" + (i >= parallel ? " queued" : "");
+      el.innerHTML = `<span class="mark spin">◜</span>
+        <span class="what">${escapeHtml(s.display)}${
+          s.options ? ` <span class="opts">· ${escapeHtml(s.options)}</span>` : ""}</span>
+        <span class="t"></span>
+        <span class="prog-bar${s.estimate_ms ? "" : " unknown"}"><i></i></span>`;
+      box.appendChild(el);
+      return {...s, el, started: i < parallel ? performance.now() : null, done: false};
+    });
+    tick();
+    timer = setInterval(tick, 100);
+  }
+
+  function tick() {
+    for (const row of rows) {
+      if (row.done) continue;
+      const t = row.el.querySelector(".t"), bar = row.el.querySelector(".prog-bar i");
+      if (row.started === null) { t.textContent = "queued"; continue; }
+      const ms = performance.now() - row.started;
+      t.textContent = secs(ms) + (row.estimate_ms ? ` / ~${secs(row.estimate_ms)}` : "")
+                    + (row.cached ? " · cached" : "");
+      if (row.estimate_ms) {
+        // never quite reaches the end while it is still running: a full bar
+        // that keeps going is worse than an honest 95%
+        bar.style.width = Math.min(95, (ms / row.estimate_ms) * 100).toFixed(0) + "%";
+      }
+    }
+  }
+
+  function finish(ev) {
+    const row = rows.find(r => r.name === ev.source && !r.done);
+    if (!row) return;
+    row.done = true;
+    row.el.classList.remove("queued");
+    row.el.classList.add(ev.ok ? "done" : "failed");
+    row.el.querySelector(".mark").className = "mark";
+    row.el.querySelector(".mark").textContent = ev.ok ? "✓" : "✕";
+    row.el.querySelector(".t").textContent =
+      secs(ev.ms) + (ev.cached ? " · cached" : "");
+    const bar = row.el.querySelector(".prog-bar");
+    bar.classList.remove("unknown");
+    bar.querySelector("i").style.width = "100%";
+    if (!ev.ok && ev.error) {
+      const e = document.createElement("span");
+      e.className = "err"; e.textContent = ev.error;
+      row.el.appendChild(e);
+    }
+    // a worker freed up: whichever row is still queued starts now
+    const next = rows.find(r => r.started === null);
+    if (next) { next.started = performance.now(); next.el.classList.remove("queued"); }
+  }
+
+  function stop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    // a failed source keeps its row on screen: which one broke, and why, is
+    // the whole diagnosis, and the plot below only shows what did work
+    const failed = rows.some(r => r.el.classList.contains("failed"));
+    prog.className = failed ? "on" : "";
+    if (failed) prog.querySelector(".prog-head").textContent = "Fetched";
+  }
+
+  return {begin, plan, finish, stop};
+})();
+
+function utc(iso) { return iso.slice(0, 16).replace("T", " "); }
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+}
 
 const plotDiv = document.getElementById("plot");
 

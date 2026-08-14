@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import time
-from concurrent.futures import ThreadPoolExecutor
+import json
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import (
+    FileResponse, JSONResponse, Response, StreamingResponse,
+)
 from pydantic import BaseModel
 
-from solarapp.core import events, export, resultcache
-from solarapp.core.parser import parse
+from solarapp.core import export, pipeline, resultcache, timings
 from solarapp.core.registry import get_registry
 
 app = FastAPI(title="SolarQuick")
@@ -36,91 +36,58 @@ def index() -> FileResponse:
 
 @app.get("/api/sources")
 def sources() -> list[dict]:
+    """Everything a plugin declares, so the UI can list it without a code change."""
     return [
-        {"name": s.name, "display_name": s.display_name, "keywords": s.keywords}
+        {
+            "name": s.name,
+            "display_name": s.display_name,
+            "keywords": s.keywords,
+            "options": [
+                {"label": v.label, "keywords": v.keywords,
+                 "group": v.group or s.variable_key}
+                for v in s.variables if not v.hidden
+            ],
+            "coverage": list(s.coverage),
+            "in_summary": s.summary_rank is not None,
+        }
         for s in get_registry().sources.values()
     ]
 
 
 @app.post("/api/query")
 def query(body: Query) -> JSONResponse:
-    reg = get_registry()
-    t_start = time.perf_counter()
-    timings: dict[str, int] = {}
-
-    parsed = parse(body.q, reg)
-    timings["parse"] = round((time.perf_counter() - t_start) * 1000)
-    if not parsed.ok:
-        return JSONResponse({"errors": parsed.errors}, status_code=422)
-
-    t0 = time.perf_counter()
-    try:  # event queries ("biggest flare since 2014") resolve against HEK here
-        events.expand(parsed)
-    except RuntimeError as e:
-        return JSONResponse({"errors": [str(e)]}, status_code=422)
-    elapsed = round((time.perf_counter() - t0) * 1000)
-    if elapsed:  # only when an event query actually resolved something
-        timings["resolve_event"] = elapsed
-
-    cache = resultcache.get_cache()
-    use_cache = resultcache.enabled()
-    cached: list[str] = []
-
-    def run(req) -> tuple[dict | None, str | None, str, int]:
-        src = reg.get(req.source)
-        t = time.perf_counter()
-        key = resultcache.key_for(req.source, req.extras, parsed.start, parsed.end)
-        if use_cache:
-            hit = cache.get(key)
-            if hit is not None:
-                cached.append(req.source)
-                return hit, None, req.source, round((time.perf_counter() - t) * 1000)
-        try:
-            spec = src.fetch(parsed.start, parsed.end, **req.extras)
-            err = None
-            if use_cache:  # only successes: a 503 must not become a cached outage
-                cache.put(key, spec, parsed.end)
-        except Exception as e:  # surfacing fetch problems to the UI beats a 500
-            spec, err = None, f"{src.display_name}: {e}"
-        return spec, err, req.source, round((time.perf_counter() - t) * 1000)
-
-    # sources are network-bound and independent — fetch them concurrently
-    with ThreadPoolExecutor(max_workers=min(4, len(parsed.requests))) as pool:
-        outcomes = list(pool.map(run, parsed.requests))
-    specs = [s for s, _, _, _ in outcomes if s is not None]
-    errors = [e for _, e, _, _ in outcomes if e is not None]
-    for _, _, name, ms in outcomes:  # same source twice (aia 171 and 304) → keep the slower
-        timings[name] = max(ms, timings.get(name, 0))
-
-    if not specs:
-        return JSONResponse({"errors": errors}, status_code=502)
-
-    if len(parsed.requests) == 1:
-        spec = specs[0]
-    else:
-        spec = {"kind": "multi", "items": specs}
-        if errors:
-            spec["note"] = "Some sources failed — " + " · ".join(errors)
-
-    if parsed.correction_note:  # tell the user what we read, never silently guess
-        spec["note"] = " ".join(filter(None, [parsed.correction_note, spec.get("note")]))
-
-    # wall clock is less than the sum when sources run concurrently — that gap
-    # is exactly what the concurrency is buying, so report both
-    timings["total"] = round((time.perf_counter() - t_start) * 1000)
-    spec["timings"] = timings
-    if cached:  # visible, so a surprising result can be checked against a fresh fetch
-        spec["cached"] = sorted(set(cached))
-
-    spec["parsed"] = {
-        "source": parsed.source,
-        "sources": [r.source for r in parsed.requests],
-        "start": parsed.start.isoformat(),
-        "end": parsed.end.isoformat(),
-        "corrections": parsed.corrections,
-        "rewritten": parsed.rewritten,
-    }
+    """Run a query and return the finished spec (no progress reporting)."""
+    spec, errors, status = pipeline.collect(body.q, get_registry())
+    if spec is None:
+        return JSONResponse({"errors": errors}, status_code=status)
     return JSONResponse(spec)
+
+
+@app.post("/api/query/stream")
+def query_stream(body: Query) -> StreamingResponse:
+    """The same query as NDJSON progress events, one JSON object per line.
+
+    The browser reads these as they arrive, so a twelve-second fetch shows
+    what it is waiting for and how long that source usually takes, instead of
+    a spinner that could equally mean "working" or "hung". The final `result`
+    event carries exactly what /api/query would have returned.
+    """
+    def lines():
+        for event in pipeline.run(body.q, get_registry()):
+            yield json.dumps(event) + "\n"
+
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        # a proxy that buffered this would defeat the whole point
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/timings")
+def timing_stats() -> dict:
+    """What each source has typically cost on this machine."""
+    return {"enabled": timings.enabled(), "sources": timings.get_timings().stats()}
 
 
 @app.get("/api/cache")

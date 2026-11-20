@@ -12,7 +12,8 @@ An event view narrows the time range to the flare's rise–decay window
 (padded) and, when the user asked for nothing else, adds companions:
 GOES XRS for the light curve, AIA 131+304 cropped to the flare site when
 the catalog has a usable position (EIT 195 full-disk for pre-SDO events),
-and STIX when Solar Orbiter was flying.
+STIX when Solar Orbiter was flying, and the FISM2 spectral movie (raw model
+irradiance) for any flare since 2003.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from solarapp.core.parser import ParsedQuery, SourceRequest
 
 SDO_ERA = datetime(2010, 5, 1, tzinfo=timezone.utc)
 STIX_ERA = datetime(2020, 4, 14, tzinfo=timezone.utc)
+FISM_ERA = datetime(2003, 1, 1, tzinfo=timezone.utc)
 CROP_FOV = 500.0  # arcsec field of view around the flare site
 
 
@@ -73,3 +75,5 @@ def expand(parsed: ParsedQuery) -> None:
         parsed.requests.append(SourceRequest("soho_images", {"channel": "eit_195"}))
     if flare.peak >= STIX_ERA:
         parsed.requests.append(SourceRequest("solo_stix", {}))
+    if flare.peak >= FISM_ERA:
+        parsed.requests.append(SourceRequest("fism", {}))

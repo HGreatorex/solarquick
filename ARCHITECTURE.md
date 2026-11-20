@@ -50,6 +50,7 @@ solarapp/
 │   │   │                       GOES 13-15 Lyman-α backend for pre-2017)
 │   │   ├── sdo_images.py    ← SDO AIA/HMI images via Helioviewer
 │   │   ├── sdo_eve.py       ← SDO EVE L2B lines & spectra (LASP)
+│   │   ├── fism.py          ← FISM2 flare spectra (LASP, raw model) → looping movie
 │   │   ├── soho_images.py   ← SOHO EIT + LASCO C2/C3 via Helioviewer
 │   │   ├── solo_eui.py      ← Solar Orbiter EUI FSI/HRI via Helioviewer
 │   │   ├── solo_stix.py     ← Solar Orbiter STIX quicklook (STIX Data Center API)
@@ -62,7 +63,7 @@ solarapp/
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
 │       └── static/index.html← single-page UI: query box + progress + Plotly plot
-└── tests/                   ← 389, all offline
+└── tests/                   ← 449, all offline
 ```
 
 ## Request flow
@@ -204,10 +205,11 @@ query names a flare superlative ("biggest flare since 2014") or a pinpoint
 the time range to its rise–decay window, and — unless the user named their
 own companions — appends the instruments worth seeing: GOES XRS, AIA 131+304
 cropped to the flare site, STIX if Solar Orbiter was flying, SOHO EIT
-instead of AIA for pre-2010 events. Everything downstream is just an
+instead of AIA for pre-2010 events, and the FISM2 spectral movie for any
+flare since 2003. Everything downstream is just an
 ordinary multi-source request.
 
-**PlotSpec** (dict), eight kinds:
+**PlotSpec** (dict), nine kinds:
 - timeseries (default): `title`, `series: [{name, times[iso], values[]}]`,
   `yaxis: {label, type: "log"|"linear"}`, optional `bands: [{label, y0, y1}]`.
   A series may use numeric `x` instead of `times` (spectra: irradiance vs nm).
@@ -220,6 +222,11 @@ ordinary multi-source request.
   `zlabel` — rendered as a Plotly heatmap (Wind/WAVES).
 - `kind: "panels"`: `panels: [spec...]` — stacked subplots (GOES EUVS
   channel groups, WAVES RAD2/RAD1).
+- `kind: "spectral_movie"`: `times[]`, `wavelengths[]`, `frames[time][λ]`,
+  `yaxis.range` (fixed for the whole movie so frames compare), `lightcurve:
+  {name, times, values, yaxis}`, `cadence_s`, optional `sampling` — the browser
+  loops the spectra with play/pause, scrub and speed controls and a cursor on
+  the light curve (click it to jump). Exports as a wavelength × time matrix.
 - `kind: "multi"`: `items: [spec...]` — one block per requested source
   (server-assembled for multi-source queries), any of the kinds above;
   optional `note` lists sources that failed.
@@ -384,6 +391,11 @@ ordinary multi-source request.
   export writes it into the header. A file that looked like raw instrument data
   but silently contained binned means would be worse than no export, so any new
   downsampling source must thread that field through too.
+- **FISM2 is a model, served raw.** `fism.py` plots LASP's flare product
+  (0.1 nm, 60 s) unadjusted — no GOES/EVE correction (that is fism-obs's job)
+  and no pre-flare or peak normalisation. Daily files are ~17 MB, lag real time
+  by about a week, and are cached; a window over 240 frames is strided (light
+  curve kept at 60 s) and the stride is disclosed as `sampling`.
 - **Wind/WAVES intensity** is 10·log10(PSD/daily-background) — the standard
   quicklook normalisation, not absolute flux.
 
@@ -449,7 +461,7 @@ ordinary multi-source request.
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (389, all offline — external APIs are never
+template. Tests: `pytest tests/` (449, all offline — external APIs are never
 called from the suite, and a test that quietly starts doing so shows up as a
 suite that takes twenty seconds instead of one).
 

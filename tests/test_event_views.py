@@ -54,7 +54,7 @@ def test_sdo_era_composes_xrs_aia_and_stix(stub_hek):
     stub_hek(make_flare(utc(2022, 4, 20, 3, 57)))
     p = parsed_for({"superlative": True})
     events.expand(p)
-    assert sources_of(p) == ["flares", "goes_xrs", "sdo_images", "sdo_images", "solo_stix"]
+    assert sources_of(p) == ["flares", "goes_xrs", "sdo_images", "sdo_images", "solo_stix", "fism"]
     assert [r.extras["channel"] for r in p.requests if r.source == "sdo_images"] \
         == ["aia_131", "aia_304"]
 
@@ -63,8 +63,8 @@ def test_pre_sdo_falls_back_to_eit_without_stix(stub_hek):
     stub_hek(make_flare(utc(2003, 10, 28, 11, 10), cls="X17.2"))
     p = parsed_for({"superlative": True}, start=utc(2003, 1, 1), end=utc(2004, 1, 1))
     events.expand(p)
-    assert sources_of(p) == ["flares", "goes_xrs", "soho_images"]
-    assert p.requests[-1].extras == {"channel": "eit_195"}
+    assert sources_of(p) == ["flares", "goes_xrs", "soho_images", "fism"]
+    assert p.requests[2].extras == {"channel": "eit_195"}
 
 
 def test_pre_stix_sdo_era_has_no_stix(stub_hek):

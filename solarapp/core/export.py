@@ -86,6 +86,16 @@ def _spectrogram_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
     return label, list(times), rows
 
 
+def _movie_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
+    """Spectral movie: one row per wavelength, one column per frame time."""
+    times, waves = spec.get("times") or [], spec.get("wavelengths") or []
+    frames = spec.get("frames") or []
+    if not times or not waves:
+        raise NotExportable("this spectral movie has no data to export")
+    rows = [[w, *(f[i] for f in frames)] for i, w in enumerate(waves)]
+    return "wavelength_nm", list(times), rows
+
+
 def _events_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
     events = spec.get("events") or []
     if not events:
@@ -140,6 +150,7 @@ def _regions_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
 
 _WRITERS = {
     "spectrogram": _spectrogram_rows,
+    "spectral_movie": _movie_rows,
     "events": _events_rows,
     "positions": _positions_rows,
     "earthmap": _earthmap_rows,

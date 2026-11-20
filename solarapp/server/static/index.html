@@ -40,6 +40,14 @@
   .events tr.sel { background:#1c2128; outline:1px solid #f0a832; }
   .events td:first-child { color:#f0a832; font-weight:600; }
   .evhint { color:#8b949e; font-size:.8rem; text-align:center; margin:.4rem 0 1rem; }
+  .movie .mspec { width:100%; height:440px; }
+  .movie .mlc { width:100%; height:220px; }
+  .movie .mctl { display:flex; gap:.6rem; align-items:center; margin:.2rem 0 .3rem; }
+  .movie .mctl button { padding:.3rem .8rem; font-size:.9rem; min-width:2.8rem; }
+  .movie .mslider { flex:1; padding:0; border:none; background:none; accent-color:#f0a832; }
+  .movie .mtime { color:#8b949e; font-size:.85rem; font-variant-numeric:tabular-nums; }
+  .movie select { background:#161b22; color:#e6edf3; border:1px solid #30363d;
+                  border-radius:6px; padding:.25rem; font-size:.8rem; }
   .dl { display:flex; gap:.4rem; justify-content:flex-end; align-items:center;
         margin:.1rem 0 1.2rem; }
   .dl button { padding:.3rem .7rem; font-size:.78rem; font-weight:500;
@@ -79,7 +87,7 @@
 </head>
 <body>
 <h1>Solar<span>Quick</span></h1>
-<p class="hint">e.g. “xrays wednesday” · “2017-09-06” (a date on its own gives an overview) · “aia 171, 193 and 211 yesterday” · “goes xrs long channel last night” · “euvs he ii 2026-08-01” · “lasco c3 yesterday afternoon” · “rhessi 25-50 kev 2003-10-28” · “flares july to august 2014” · “biggest flare since 2014” · “positions today” · “terminator today”</p>
+<p class="hint">e.g. “xrays wednesday” · “2017-09-06” (a date on its own gives an overview) · “aia 171, 193 and 211 yesterday” · “goes xrs long channel last night” · “euvs he ii 2026-08-01” · “lasco c3 yesterday afternoon” · “rhessi 25-50 kev 2003-10-28” · “flares july to august 2014” · “biggest flare since 2014” · “fism 2017-09-10 15:30 to 18:00” · “positions today” · “terminator today”</p>
 <form id="f">
   <input id="q" placeholder="Ask for data…" autofocus autocomplete="off">
   <button id="go">Plot</button>
@@ -257,7 +265,11 @@ const DARK = {
   paper_bgcolor: "#0d1117", plot_bgcolor: "#161b22", font: {color:"#e6edf3"},
 };
 
+// spectral movies loop on intervals; a new result must stop the old ones
+let movieTimers = [];
+
 function render(d) {
+  movieTimers.forEach(clearInterval); movieTimers = [];
   plotDiv.innerHTML = "";
   plotDiv.style.height = "auto";
   const items = d.kind === "multi" ? d.items : [d];
@@ -299,6 +311,7 @@ function renderItem(item, compact, stats, markers) {
   if (item.kind === "images") { renderImages(item, stats); return; }
   if (item.kind === "events") { renderEvents(item, stats); return; }
   if (item.kind === "regions") { renderRegions(item, stats); return; }
+  if (item.kind === "spectral_movie") { renderMovie(item, stats, markers); return; }
   const specs = item.kind === "panels" ? item.panels : [item];
   const plots = [];
   specs.forEach(s => {
@@ -676,6 +689,97 @@ function plotEarthmap(el, d) {
     },
     margin: {t: 40, b: 10, l: 10, r: 10},
   }, {responsive: true});
+}
+
+// Spectral movie: one spectrum per frame on fixed axes (so frames compare),
+// the start spectrum as a grey reference, and a band light curve below with a
+// cursor at the current frame. Loops until paused; click the curve to jump.
+function renderMovie(d, stats, markers) {
+  const box = document.createElement("div");
+  box.className = "movie";
+  box.innerHTML = `<div class="mspec"></div>
+    <div class="mctl"><button class="mplay" title="Play / pause">❚❚</button>
+      <input class="mslider" type="range" min="0" step="1">
+      <span class="mtime"></span>
+      <select class="mfps" title="Playback speed">
+        <option value="2">2 fps</option><option value="5" selected>5 fps</option>
+        <option value="10">10 fps</option><option value="20">20 fps</option></select></div>
+    <div class="mlc"></div>`;
+  plotDiv.appendChild(box);
+  const spec = box.querySelector(".mspec"), lc = box.querySelector(".mlc"),
+        play = box.querySelector(".mplay"), slider = box.querySelector(".mslider"),
+        label = box.querySelector(".mtime"), fps = box.querySelector(".mfps");
+  const n = d.frames.length, grid = "#30363d";
+  slider.max = n - 1;
+  const ylog = d.yaxis?.type === "log";
+  Plotly.newPlot(spec, [
+    {x: d.wavelengths, y: d.frames[0], name: `start ${utc(d.times[0]).slice(11)} UT`,
+     mode: "lines", line: {width: 1, color: "#6e7681"}, hoverinfo: "skip"},
+    {x: d.wavelengths, y: d.frames[0], name: "spectrum", mode: "lines",
+     line: {width: 1.3, color: "#f0a832"}},
+  ], {
+    ...DARK,
+    title: {text: d.title, font: {size: 14}},
+    xaxis: {title: d.xaxis?.label, gridcolor: grid,
+            range: [d.wavelengths[0], d.wavelengths[d.wavelengths.length - 1]]},
+    yaxis: {title: d.yaxis?.label, type: d.yaxis?.type || "linear", gridcolor: grid,
+            exponentformat: "power",
+            range: d.yaxis?.range ? (ylog ? d.yaxis.range.map(Math.log10) : d.yaxis.range) : undefined},
+    legend: {orientation: "h", y: -0.18}, margin: {t: 50, r: 40},
+  }, {responsive: true});
+
+  const L = d.lightcurve;
+  const shapes = [{type: "line", xref: "x", yref: "paper", x0: d.times[0], x1: d.times[0],
+                   y0: 0, y1: 1, line: {color: "#f0a832", width: 1.5}}];
+  const annotations = [];
+  (markers || []).forEach(mk => {
+    shapes.push({type: "line", x0: mk.t, x1: mk.t, xref: "x", yref: "paper", y0: 0, y1: 1,
+      line: {color: "#e2604d", width: 1, dash: "dot"}});
+    annotations.push({x: mk.t, xref: "x", yref: "paper", y: 1.04, text: mk.label,
+      showarrow: false, font: {color: "#e2604d", size: 10}});
+  });
+  Plotly.newPlot(lc, [{x: L.times, y: L.values, name: L.name, mode: "lines",
+                       line: {width: 1.5, color: "#58a6ff"}}], {
+    ...DARK,
+    title: {text: L.name, font: {size: 12}},
+    xaxis: {gridcolor: grid},
+    yaxis: {title: L.yaxis?.label, type: L.yaxis?.type || "linear", gridcolor: grid,
+            exponentformat: "power"},
+    shapes, annotations, showlegend: false, margin: {t: 35, r: 40, b: 30},
+  }, {responsive: true});
+
+  // wall-clock ms with any offset dropped, as Plotly reports clicked dates
+  const wall = t => Date.parse(String(t).replace(" ", "T").slice(0, 19) + "Z");
+  const frameMs = d.times.map(wall);
+  let i = 0, timer = null;
+  const show = k => {
+    i = k;
+    Plotly.restyle(spec, {y: [d.frames[k]]}, [1]);
+    Plotly.relayout(lc, {"shapes[0].x0": d.times[k], "shapes[0].x1": d.times[k]});
+    slider.value = k;
+    label.textContent = `${utc(d.times[k])} UT · ${k + 1}/${n}`;
+  };
+  const stop = () => { if (timer) clearInterval(timer); timer = null; play.textContent = "▶"; };
+  const start = () => {
+    stop();
+    timer = setInterval(() => show((i + 1) % n), 1000 / +fps.value);
+    movieTimers.push(timer);
+    play.textContent = "❚❚";
+  };
+  play.addEventListener("click", () => timer ? stop() : start());
+  slider.addEventListener("input", () => { stop(); show(+slider.value); });
+  fps.addEventListener("change", () => { if (timer) start(); });
+  lc.on("plotly_click", ev => {
+    const t = wall(ev.points[0].x);
+    let best = 0;
+    frameMs.forEach((m, k) => { if (Math.abs(m - t) < Math.abs(frameMs[best] - t)) best = k; });
+    stop(); show(best);
+  });
+  show(0);
+  if (n > 1) start(); else stop();
+  stats.frames += n;
+  stats.points += n * d.wavelengths.length;
+  downloadBar(d, {plots: [spec, lc]});
 }
 
 function renderImages(d, stats) {

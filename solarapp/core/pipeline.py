@@ -24,11 +24,11 @@ from __future__ import annotations
 
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterator
 
-from . import events, resultcache, timings
-from .parser import parse
+from . import events, resultcache, timings, workspace
+from .parser import ParsedQuery, SourceRequest, parse
 from .registry import Registry
 
 MAX_WORKERS = 4
@@ -60,7 +60,64 @@ def run(query: str, registry: Registry) -> Iterator[dict]:
     elapsed = round((time.perf_counter() - t0) * 1000)
     if elapsed:  # only when an event query actually resolved something
         stage["resolve_event"] = elapsed
+    yield from _execute(parsed, registry, t_start, stage)
 
+
+def _parse_time(value: str) -> datetime:
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def run_structured(body: dict, registry: Registry) -> Iterator[dict]:
+    """The form's request (see core/workspace.py): same events as `run`.
+
+    body: {start, end, requests: [{source, extras}], frames?, crop_fov?, label?}
+    """
+    t_start = time.perf_counter()
+    stage: dict[str, int] = {}
+    yield {"event": "parsing", "query": body.get("label") or "selection"}
+    try:
+        start, end = _parse_time(body["start"]), _parse_time(body["end"])
+    except (KeyError, ValueError, AttributeError):
+        yield {"event": "error", "errors": ["Start and end must be ISO date-times."],
+               "status": 422}
+        return
+    if end <= start:
+        yield {"event": "error", "errors": ["The end time must be after the start."],
+               "status": 422}
+        return
+
+    parsed = ParsedQuery(start=start, end=end)
+    for r in body.get("requests") or []:
+        if registry.get(r.get("source")) is None:
+            yield {"event": "error", "errors": [f"Unknown source: {r.get('source')}"],
+                   "status": 422}
+            return
+        parsed.requests.append(SourceRequest(r["source"], dict(r.get("extras") or {})))
+    notes = []
+    if not parsed.requests:
+        parsed.requests = workspace.default_requests(registry, start, end)
+        if not parsed.requests:
+            yield {"event": "error", "status": 422,
+                   "errors": ["No default sources were observing in this window."]}
+            return
+
+    t0 = time.perf_counter()
+    note = workspace.apply_image_options(
+        parsed.requests, registry, start, end,
+        frames=body.get("frames"), crop_fov=body.get("crop_fov"))
+    elapsed = round((time.perf_counter() - t0) * 1000)
+    if elapsed > 5:
+        stage["resolve_event"] = elapsed
+    if note:
+        notes.append(note)
+    parsed.source, parsed.extras = parsed.requests[0].source, parsed.requests[0].extras
+    yield from _execute(parsed, registry, t_start, stage, " ".join(notes) or None)
+
+
+def _execute(parsed: ParsedQuery, registry: Registry, t_start: float,
+             stage: dict[str, int], extra_note: str | None = None) -> Iterator[dict]:
+    """Fetch every request of an already-resolved query, streaming progress."""
     cache = resultcache.get_cache()
     use_cache = resultcache.enabled()
     learned = timings.get_timings()
@@ -88,7 +145,7 @@ def run(query: str, registry: Registry) -> Iterator[dict]:
         "parallel": MAX_WORKERS,
         "start": _iso(parsed.start),
         "end": _iso(parsed.end),
-        "note": parsed.correction_note or None,
+        "note": " ".join(filter(None, [parsed.correction_note, extra_note])) or None,
     }
 
     def work(index: int) -> dict:
@@ -130,6 +187,10 @@ def run(query: str, registry: Registry) -> Iterator[dict]:
                    "cached": out["cached"]}
 
     outcomes.sort(key=lambda o: o["index"])  # restore the order they were asked in
+    for o in outcomes:  # which request made each block: the UI re-asks per panel
+        if o["spec"] is not None:
+            req = parsed.requests[o["index"]]
+            o["spec"]["request"] = {"source": req.source, "extras": req.extras}
     specs = [o["spec"] for o in outcomes if o["spec"] is not None]
     errors = [o["error"] for o in outcomes if o["error"] is not None]
 
@@ -137,7 +198,7 @@ def run(query: str, registry: Registry) -> Iterator[dict]:
         yield {"event": "error", "errors": errors, "status": 502}
         return
 
-    if len(specs) == 1 and len(parsed.requests) == 1:
+    if len(specs) == 1 and len(parsed.requests) == 1 and not extra_note:
         spec = specs[0]
     else:
         spec = {"kind": "multi", "items": specs}
@@ -146,6 +207,8 @@ def run(query: str, registry: Registry) -> Iterator[dict]:
 
     if parsed.correction_note:  # tell the user what we read, never silently guess
         spec["note"] = " ".join(filter(None, [parsed.correction_note, spec.get("note")]))
+    if extra_note:
+        spec["note"] = " ".join(filter(None, [extra_note, spec.get("note")]))
 
     # wall clock is less than the sum when sources run concurrently — that gap
     # is exactly what the concurrency is buying, so report both
@@ -157,6 +220,7 @@ def run(query: str, registry: Registry) -> Iterator[dict]:
     spec["parsed"] = {
         "source": parsed.source,
         "sources": [r.source for r in parsed.requests],
+        "requests": [{"source": r.source, "extras": r.extras} for r in parsed.requests],
         "start": _iso(parsed.start),
         "end": _iso(parsed.end),
         "corrections": parsed.corrections,

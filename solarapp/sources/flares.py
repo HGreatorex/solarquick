@@ -15,6 +15,7 @@ import re
 from datetime import datetime
 
 from solarapp.core import hek
+from solarapp.sources.solar_regions import flare_sites_from_regions
 from solarapp.core.registry import DataSource, PlotSpec, Variable
 
 _ABOVE = re.compile(r"\b(?:above|over|>=?)\s*([abcmx])\s*(\d+(?:\.\d+)?)?", re.I)
@@ -58,15 +59,23 @@ class Flares(DataSource):
         flares = hek.search_flares(start, end, min_class=min_class)
         pin = extras.get("pin_peak")
 
+        try:  # an SRS outage must not cost the flare list
+            placed = flare_sites_from_regions(flares)
+        except Exception:
+            placed = {}
+
         events, markers = [], []
-        for f in flares:
+        for i, f in enumerate(flares):
+            est = placed.get(i)
             events.append({
                 "class": f.goes_class or "?",
                 "start": f.start.isoformat(),
                 "peak": f.peak.isoformat(),
                 "end": f.end.isoformat(),
-                "x": round(f.hpc_x, 1) if f.has_position else None,
-                "y": round(f.hpc_y, 1) if f.has_position else None,
+                "x": round(f.hpc_x, 1) if f.has_position else (est[0] if est else None),
+                "y": round(f.hpc_y, 1) if f.has_position else (est[1] if est else None),
+                # set when the position is estimated rather than catalogued
+                "position_from": est[2] if est else None,
                 "ar": f.ar or None,
                 "query": f"flare at {f.peak:%Y-%m-%d %H:%M}",
                 "selected": pin is not None and f.peak.isoformat() == pin,
@@ -81,6 +90,9 @@ class Flares(DataSource):
             "markers": markers,
             "provenance": "HEK (LMSAL) — SWPC/GOES flare list",
         }
+        if placed:
+            spec["note"] = (f"{len(placed)} flare position(s) estimated from the "
+                            "flaring region in the Solar Region Summary (marked ≈).")
         if not events:
             spec["note"] = "No flares in the catalog for this interval/class."
         return spec

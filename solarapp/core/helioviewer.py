@@ -29,8 +29,11 @@ from solarapp.core.registry import DataSource, PlotSpec
 
 HV = "https://api.helioviewer.org/v2"
 IMAGE_PX = 1024
+GRID_PX = 512    # one cell of the UI's image grid
 THUMB_PX = 128
 MAX_FRAMES = 8
+MAX_REQUESTED_FRAMES = 60  # the UI's movie/stills timeline (`frames` extra)
+METADATA_WORKERS = 8       # per source; several sources run at once
 
 # pooled connections live in core.httpclient — these calls are small, numerous
 # and all to one host, so a fresh TLS handshake each time dominated their cost
@@ -42,6 +45,15 @@ def sample_times(start: datetime, end: datetime, max_frames: int = MAX_FRAMES) -
     hours = duration.total_seconds() / 3600
     n = max(1, min(max_frames, math.ceil(hours)))
     return [start + duration * i / n for i in range(n)]
+
+
+def even_times(start: datetime, end: datetime, n: int) -> list[datetime]:
+    """`n` times spanning [start, end] inclusive — the UI's frame timeline."""
+    n = max(1, min(int(n), MAX_REQUESTED_FRAMES))
+    if n == 1:
+        return [(start + (end - start) / 2).replace(microsecond=0)]
+    return [(start + (end - start) * i / (n - 1)).replace(microsecond=0)
+            for i in range(n)]
 
 
 def match_wavelength(query_lower: str, wavelengths: list[int]) -> int | None:
@@ -57,22 +69,21 @@ class HelioviewerImageSource(DataSource):
 
     channels: dict[str, dict] = {}
     default_channel: str = ""
+    display = "images"
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
         self.check_coverage(start, end)
         channel = self.channels[extras.get("channel", self.default_channel)]
-        # spatial crop: center (arcsec from disk center) + field of view (arcsec)
-        crop = None
-        if "fov" in extras:
-            crop = (float(extras.get("center_x", 0.0)),
-                    float(extras.get("center_y", 0.0)),
-                    float(extras["fov"]))
-        times = sample_times(start, end)
+        crop = self._crop(extras)
+        # `frames` (from the UI) asks for an evenly spaced timeline at any
+        # cadence; without it, the text route keeps its hourly ≤8 filmstrip
+        times = (even_times(start, end, extras["frames"]) if extras.get("frames")
+                 else sample_times(start, end))
         # independent metadata lookups: run together rather than paying ~470 ms
         # of round trip each in series. Results are collected in request order
         # so the dedupe below still sees frames chronologically.
         if len(times) > 1:
-            with ThreadPoolExecutor(max_workers=len(times)) as pool:
+            with ThreadPoolExecutor(max_workers=min(len(times), METADATA_WORKERS)) as pool:
                 resolved = list(pool.map(
                     lambda t: self._closest_image(t, channel["source_id"]), times))
         else:
@@ -84,14 +95,7 @@ class HelioviewerImageSource(DataSource):
                 continue  # data gap: same image matched two sample times
             seen_ids.add(img_id)
             max_gap_h = max(max_gap_h, abs((actual - t).total_seconds()) / 3600)
-            frames.append({
-                # already tz-aware: appending an offset produced the
-                # unparseable "...T09:59:53+00:00+00:00" in every JSON export
-                "time": actual.isoformat(),
-                "url": self._screenshot_url(actual, channel, crop),
-                "thumb_url": self._screenshot_url(actual, channel, crop, px=THUMB_PX),
-                "caption": f"{channel['label']}  {actual:%Y-%m-%d %H:%M:%S} UT",
-            })
+            frames.append(self._frame(actual, t, channel, crop))
 
         title = f"{channel['label']}  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT"
         if crop:
@@ -99,6 +103,7 @@ class HelioviewerImageSource(DataSource):
         spec: PlotSpec = {
             "kind": "images",
             "title": title,
+            "label": channel["label"],
             "images": frames,
             "provenance": "Helioviewer.org (JPEG2000 browse images — quicklook, not science data)",
         }
@@ -108,6 +113,34 @@ class HelioviewerImageSource(DataSource):
                 "time — the archive may not cover this interval."
             )
         return spec
+
+    def frame_at(self, t: datetime, **extras) -> dict:
+        """The single frame nearest `t` (the UI's flare-peak tick)."""
+        channel = self.channels[extras.get("channel", self.default_channel)]
+        actual, _ = self._closest_image(t, channel["source_id"])
+        return self._frame(actual, t, channel, self._crop(extras))
+
+    @staticmethod
+    def _crop(extras: dict) -> tuple | None:
+        """center (arcsec from disk center) + field of view (arcsec), if asked."""
+        if "fov" not in extras:
+            return None
+        return (float(extras.get("center_x", 0.0)), float(extras.get("center_y", 0.0)),
+                float(extras["fov"]))
+
+    def _frame(self, actual: datetime, requested: datetime, channel: dict,
+               crop: tuple | None) -> dict:
+        return {
+            # already tz-aware: appending an offset produced the
+            # unparseable "...T09:59:53+00:00+00:00" in every JSON export
+            "time": actual.isoformat(),
+            # the timeline slot this frame fills, shared by every panel
+            "t_req": requested.isoformat(),
+            "url": self._screenshot_url(actual, channel, crop),
+            "grid_url": self._screenshot_url(actual, channel, crop, px=GRID_PX),
+            "thumb_url": self._screenshot_url(actual, channel, crop, px=THUMB_PX),
+            "caption": f"{channel['label']}  {actual:%Y-%m-%d %H:%M:%S} UT",
+        }
 
     # -- Helioviewer API --------------------------------------------------
 

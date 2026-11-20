@@ -139,6 +139,9 @@ class DataSource(ABC):
     variables: list[Variable] = []
     # extras key a bare Variable fills ("channel" suits most imagers)
     variable_key: str = "channel"
+    # what the block renders as in the two-pane UI: "images" go into the image
+    # grid (and its synced movie timeline), everything else stacks below it
+    display: str = "plot"
 
     # (first light, last light) as ISO dates; None = open-ended. Declared so the
     # app can refuse an out-of-span request without a network round trip and

@@ -28,6 +28,7 @@ MAX_FRAMES = 4
 
 
 class HinodeSot(DataSource):
+    display = "images"
     name = "hinode_sot"
     display_name = "Hinode SOT (filtergrams)"
     keywords = ["sot", "hinode", "hinode sot", "filtergram",

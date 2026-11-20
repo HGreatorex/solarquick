@@ -9,7 +9,10 @@ from fastapi.responses import (
 )
 from pydantic import BaseModel
 
-from solarapp.core import export, pipeline, resultcache, timings
+from datetime import datetime, timezone
+
+from solarapp.core import events, export, hek, pipeline, resultcache, timings
+from solarapp.core.parser import parse
 from solarapp.core.registry import get_registry
 
 app = FastAPI(title="SolarQuick")
@@ -18,6 +21,22 @@ STATIC = Path(__file__).parent / "static"
 
 class Query(BaseModel):
     q: str
+
+
+class RunRequest(BaseModel):
+    """The two-pane form: an explicit window and the ticked sources."""
+    start: str
+    end: str
+    requests: list[dict] = []   # [{source, extras}]; empty = the default view
+    frames: int | None = None   # image timeline length
+    crop_fov: float | None = None  # None keep, 0 full disk, >0 arcsec at flare
+    label: str | None = None
+
+
+class FrameRequest(BaseModel):
+    source: str
+    extras: dict = {}
+    time: str
 
 
 class ExportRequest(BaseModel):
@@ -42,9 +61,11 @@ def sources() -> list[dict]:
             "name": s.name,
             "display_name": s.display_name,
             "keywords": s.keywords,
+            "display": s.display,
+            "variable_key": s.variable_key,
             "options": [
-                {"label": v.label, "keywords": v.keywords,
-                 "group": v.group or s.variable_key}
+                {"key": v.key, "label": v.label, "keywords": v.keywords,
+                 "group": v.group or s.variable_key, "extras": v.extras_for(s)}
                 for v in s.variables if not v.hidden
             ],
             "coverage": list(s.coverage),
@@ -82,6 +103,79 @@ def query_stream(body: Query) -> StreamingResponse:
         # a proxy that buffered this would defeat the whole point
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/parse")
+def parse_only(body: Query) -> JSONResponse:
+    """Read a sentence into the form: window + requests, nothing fetched.
+
+    Event queries resolve here ("biggest flare since 2014" becomes that
+    flare's window and companions), so the form shows exactly what Load will
+    fetch. A bare date returns no requests: the form's default view.
+    """
+    reg = get_registry()
+    parsed = parse(body.q, reg)
+    if not parsed.ok:
+        return JSONResponse({"errors": parsed.errors}, status_code=422)
+    try:
+        events.expand(parsed)
+    except RuntimeError as e:
+        return JSONResponse({"errors": [str(e)]}, status_code=422)
+    reqs = [] if parsed.summary else [
+        {"source": r.source, "extras": r.extras} for r in parsed.requests]
+    crop = next((r["extras"]["fov"] for r in reqs if "fov" in r["extras"]), None)
+    return JSONResponse({
+        "start": parsed.start.isoformat(), "end": parsed.end.isoformat(),
+        "requests": reqs, "crop_fov": crop,
+        "note": " ".join(filter(None, [parsed.correction_note])) or None,
+    })
+
+
+@app.post("/api/run/stream")
+def run_stream(body: RunRequest) -> StreamingResponse:
+    """The form's request as NDJSON progress events (see /api/query/stream)."""
+    def lines():
+        for event in pipeline.run_structured(body.model_dump(), get_registry()):
+            yield json.dumps(event) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+def _utc(value: str) -> datetime:
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+@app.get("/api/flare")
+def flare(start: str, end: str) -> JSONResponse:
+    """The largest catalogued flare in a window — the image grid's peak tick."""
+    try:
+        f = hek.biggest_flare(_utc(start), _utc(end))
+    except ValueError:
+        return JSONResponse({"errors": ["start/end must be ISO date-times"]}, status_code=422)
+    except Exception as e:
+        return JSONResponse({"errors": [f"HEK: {e}"]}, status_code=502)
+    if f is None:
+        return JSONResponse({"flare": None})
+    return JSONResponse({"flare": {
+        "class": f.goes_class, "peak": f.peak.isoformat(), "start": f.start.isoformat(),
+        "end": f.end.isoformat(), "label": f.label(),
+        "x": f.hpc_x if f.has_position else None, "y": f.hpc_y if f.has_position else None,
+    }})
+
+
+@app.post("/api/frame")
+def frame(body: FrameRequest) -> JSONResponse:
+    """One image frame nearest a time, for a panel already on screen."""
+    src = get_registry().get(body.source)
+    if src is None or not hasattr(src, "frame_at"):
+        return JSONResponse({"errors": [f"{body.source} cannot fetch single frames"]},
+                            status_code=422)
+    try:
+        return JSONResponse(src.frame_at(_utc(body.time), **body.extras))
+    except (ValueError, KeyError) as e:
+        return JSONResponse({"errors": [f"Bad frame request: {e}"]}, status_code=422)
 
 
 @app.get("/api/timings")

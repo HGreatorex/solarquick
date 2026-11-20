@@ -295,6 +295,67 @@ def project(lat_deg: float, lon_deg: float, b0_deg: float) -> tuple[float, float
     return round(x, 4), round(y, 4)
 
 
+# -- flare sites the catalogue left unplaced -------------------------------
+
+RSUN_ARCSEC = 960.0  # mean apparent radius; the flare disk map uses the same
+
+
+def synodic_rate(lat_deg: float) -> float:
+    """Sunspot rotation seen from Earth, deg/day (Newton & Nunn, minus orbit)."""
+    return 14.38 - 2.96 * math.sin(math.radians(lat_deg)) ** 2 - 0.9856
+
+
+def _ar_number(nmbr: str) -> int | None:
+    try:
+        return int(nmbr) % 10000
+    except (TypeError, ValueError):
+        return None
+
+
+def flare_sites_from_regions(flares, today: date | None = None
+                             ) -> dict[int, tuple[float, float, str]]:
+    """Estimated (x″, y″, label) for flares HEK has no position for.
+
+    Recent SWPC entries usually carry a region number but no location. The
+    region's position is in the Solar Region Summary valid at 0000 UT of the
+    flare's day; rotating it forward to the peak (≤ ~13°) puts the flare on
+    its region to within a region's size, which is what a disk map of flare
+    sites needs. Keyed by index into `flares`; flares whose region is missing
+    from the summary, or has rotated past the limb, are left out.
+    """
+    want = [(i, f) for i, f in enumerate(flares) if not f.has_position and f.ar]
+    if not want:
+        return {}
+    # the summary valid at the start of the flare's day, else (a region
+    # numbered that day) the one valid at its end, rotated back
+    valid_days = sorted({f.peak.date() - timedelta(days=d) for _, f in want for d in (0, 1)})
+    snaps, _, _ = load_days(valid_days, today or datetime.now(timezone.utc).date())
+    out = {}
+    for i, f in want:
+        reg = ref = None
+        for back in (1, 0):
+            valid = f.peak.date() - timedelta(days=back)
+            snap = snaps.get(valid)
+            if snap is None:
+                continue
+            reg = next((r for r in snap.section(SPOTS) + snap.section(PLAGE)
+                        if _ar_number(r.nmbr) == f.ar % 10000
+                        and r.lat is not None and r.lon is not None), None)
+            if reg is not None:
+                ref = datetime(valid.year, valid.month, valid.day,
+                               tzinfo=timezone.utc) + timedelta(days=1)
+                break
+        if reg is None:
+            continue
+        lon = reg.lon + synodic_rate(reg.lat) * (f.peak - ref).total_seconds() / 86400
+        if abs(lon) > 90:
+            continue
+        x, y = project(reg.lat, lon, b0_degrees(f.peak))
+        out[i] = (round(x * RSUN_ARCSEC, 1), round(y * RSUN_ARCSEC, 1),
+                  f"AR {reg.nmbr} (SRS), rotated to the peak")
+    return out
+
+
 # -- fetching ------------------------------------------------------------
 
 

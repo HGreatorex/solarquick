@@ -38,6 +38,7 @@ solarapp/
 │   │   └── timegrammar.py   ← which time span (dates, weekdays, ranges, DOY, CR)
 │   ├── core/  (also)
 │   │   ├── pipeline.py      ← one query as a stream of progress events
+│   │   ├── workspace.py     ← the form's request: default view, frames, flare crop
 │   │   ├── summary.py       ← the overview a bare date composes
 │   │   ├── timings.py       ← learned per-source durations (~/.cache/solarapp)
 │   │   ├── helioviewer.py   ← shared Helioviewer image pipeline (channel tables)
@@ -62,9 +63,36 @@ solarapp/
 │   │   └── hinode_sot.py    ← Hinode SOT filtergrams via VSO (FITS → PNG data URIs)
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
-│       └── static/index.html← single-page UI: query box + progress + Plotly plot
-└── tests/                   ← 449, all offline
+│       └── static/index.html← two-pane UI: form (left) + image grid & plots (right)
+└── tests/                   ← 474, all offline
 ```
+
+## The two-pane UI
+
+Left: a search box, start/end pickers (typed or calendar, ±day buttons), image
+options (crop around the flare, frame count, stills or movie), the instrument
+tree built from `/api/sources` (sources not observing in the window are greyed),
+Load, and quick-select presets. Right: progress, then every image block in one
+grid (1, 2, 3 in a row; 4 as 2×2; 5 as 3+2; 6 as 3+3), then everything else.
+
+- **Typing fills the form.** `POST /api/parse` reads the sentence — event
+  queries resolve against HEK here — and returns the window, the requests and
+  any crop; nothing is fetched. A bare date returns no requests. The form then
+  runs through `POST /api/run/stream`, so what is fetched is exactly what the
+  form shows. Requests keep extras the tree cannot display (an event view's
+  crop centre) when they arrive from a parse.
+- **Nothing ticked is the default view** (`workspace.default_requests`): GOES
+  XRS, the flare list with its sites on a disk, spacecraft positions, and
+  AIA 171 + 304 (EIT before SDO).
+- **Images share one timeline.** `frames` makes every Helioviewer source sample
+  the same evenly spaced slots (`t_req` on each frame), so panels step
+  together; a cursor follows on every time axis, and clicking one jumps the
+  grid. Movies preload and wait for a frame rather than show it half-loaded.
+  The flare-peak tick asks `/api/flare` (or uses the event view's flare) and
+  `/api/frame` for each panel's frame at the peak, after the fact.
+- **Crop** needs a centre: the event view's, else the largest flare in the
+  window with a catalogued position; with none, images stay full disk and the
+  note says so. Coronagraph channels are never cropped.
 
 ## Request flow
 
@@ -248,6 +276,13 @@ ordinary multi-source request.
   `hpc_x = 0` when the location is unknown (with a plausible-looking non-zero
   `hpc_y`), so `Flare.has_position` requires |x| > 1″ before cropping to a
   site. Event views silently fall back to full-disk images.
+- **Unplaced flares are put on their region.** When HEK has no position but
+  gives a region number (most recent SWPC entries), `flares` takes that
+  region's location from the Solar Region Summary valid at the start of the
+  flare's day (else its end), rotates it to the peak, and marks the event
+  `position_from` (≈ in the table, a diamond on the disk). Checked against
+  catalogued positions for AR 12673 in 2017-09: within ~15–50″, i.e. the
+  size of the region. The image crop uses the same estimate as a fallback.
 - **HEK is filtered to one provider** (`OBS.Observatory == "GOES"`, i.e. the
   SWPC list). Dropping that filter returns the same flare several times from
   different pipelines (SWPC, SSW Latest Events, ...) with slightly different
@@ -461,7 +496,7 @@ ordinary multi-source request.
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (449, all offline — external APIs are never
+template. Tests: `pytest tests/` (474, all offline — external APIs are never
 called from the suite, and a test that quietly starts doing so shows up as a
 suite that takes twenty seconds instead of one).
 

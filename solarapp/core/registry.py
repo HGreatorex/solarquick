@@ -55,6 +55,34 @@ def keyword_regex(keyword: str) -> re.Pattern:
     return re.compile(rf"\b{_SEP.join(parts)}{plural}\b", re.I)
 
 
+def keyword_words(keyword: str) -> set[str]:
+    """Every spelling of `keyword` the spell-checker should treat as known.
+
+    It must cover exactly what `keyword_regex` accepts, or the parser
+    "corrects" words it would have matched verbatim: "active regions
+    yesterday" reported an interpretation of “regions” → “region” on its way
+    to the right answer, which reads like a warning about a typo nobody made.
+
+    So: the separate words, the run-together spelling (separators inside a
+    keyword are optional — but only when nothing else was removed, or "lasco
+    c2" would contribute the non-word "lascoc"), and the plural the matcher
+    allows on the final word.
+    """
+    words = set(re.findall(r"[a-z]+", keyword.lower()))
+    joined = re.sub(r"[\s\-/]", "", keyword.lower())
+    if len(joined) > 1 and joined.isalpha():
+        words.add(joined)
+    # The matcher's plural is meant for words that take one: it also accepts
+    # "goess", but that is a slip worth reporting, not a spelling of "goes",
+    # so a word already ending in s does not gain another.
+    last = re.findall(r"[a-z]+", keyword.lower())
+    if last and not last[-1].endswith("s") and not keyword.rstrip().endswith(tuple("0123456789")):
+        words.add(last[-1] + "s")
+        if joined.isalpha() and len(joined) > 1:
+            words.add(joined + "s")
+    return words
+
+
 @dataclass
 class Variable:
     """One selectable option inside a source: a channel, line, band, detector.
@@ -177,14 +205,7 @@ class DataSource(ABC):
         words: set[str] = set()
         for var in self.variables:
             for kw in var.keywords:
-                words.update(re.findall(r"[a-z]+", kw.lower()))
-                # separators inside a keyword are optional when matching, so
-                # the run-together spelling is a real word too ("xray",
-                # "mgii") — but only when nothing but separators was removed,
-                # or "lasco c2" would contribute the non-word "lascoc"
-                joined = re.sub(r"[\s\-/]", "", kw.lower())
-                if len(joined) > 1 and joined.isalpha():
-                    words.add(joined)
+                words |= keyword_words(kw)
         return words
 
     def variable_labels(self) -> list[str]:
@@ -291,14 +312,7 @@ class Registry:
         words: set[str] = set()
         for src in self._sources.values():
             for kw in src.keywords:
-                words.update(re.findall(r"[a-z]+", kw.lower()))
-                # separators inside a keyword are optional when matching, so
-                # the run-together spelling is a real word too ("xray",
-                # "mgii") — but only when nothing but separators was removed,
-                # or "lasco c2" would contribute the non-word "lascoc"
-                joined = re.sub(r"[\s\-/]", "", kw.lower())
-                if len(joined) > 1 and joined.isalpha():
-                    words.add(joined)
+                words |= keyword_words(kw)
             words |= src.variable_words()
         return words
 

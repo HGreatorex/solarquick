@@ -397,21 +397,25 @@ def _parse_once(query: str, registry: Registry) -> ParsedQuery:
     result = ParsedQuery()
 
     wants_summary = summary_view.asked_for(query)
-    if wants_summary:
-        result.requests, consumed, ambiguities = [], [], []
-    else:
-        result.requests, consumed, ambiguities = _match_requests(query, registry)
-        if ambiguities:
-            # a tie is a real question, not a failure — name the candidates so
-            # the user can answer it in one edit instead of guessing at the
-            # vocabulary
-            for segment, tied in ambiguities:
-                names = ", ".join(registry.get(n).display_name for n in tied)
-                result.errors.append(
-                    f"“{segment.strip()}” could mean several instruments: {names}. "
-                    "Please name the one you want."
-                )
-            return result
+    result.requests, consumed, ambiguities = _match_requests(query, registry)
+    if wants_summary and not result.requests:
+        # A summary word with nothing named is the overview outright — and a
+        # tie inside such a query ("euv summary yesterday") is not worth an
+        # error, because the overview answers it. But a summary word next to
+        # something named is not the overview: "solar region summary" is the
+        # name of a product, and "summary of goes xrs" asks for one source.
+        consumed, ambiguities = [], []
+    if ambiguities:
+        # a tie is a real question, not a failure — name the candidates so
+        # the user can answer it in one edit instead of guessing at the
+        # vocabulary
+        for segment, tied in ambiguities:
+            names = ", ".join(registry.get(n).display_name for n in tied)
+            result.errors.append(
+                f"“{segment.strip()}” could mean several instruments: {names}. "
+                "Please name the one you want."
+            )
+        return result
 
     matched = [
         kw

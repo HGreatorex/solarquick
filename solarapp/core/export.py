@@ -118,11 +118,32 @@ def _earthmap_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
     return "point", ["latitude_deg", "longitude_deg"], rows
 
 
+def _regions_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
+    """Every region of every day fetched, not just the day on the disk map.
+
+    The map and the table show one snapshot, but the query covered a span and
+    the block carries all of it — exporting only the drawn day would quietly
+    turn a month of active-region history into a single row.
+    """
+    regions = spec.get("regions") or []
+    if not regions:
+        raise NotExportable("no regions in this result to export")
+    cols = ["valid_utc", "section", "location", "latitude_deg",
+            "stonyhurst_lon_deg", "carrington_lon_deg", "area_uhem",
+            "mcintosh_class", "longitudinal_extent_deg", "spots", "mag_type"]
+    rows = [[r.get("nmbr"), r.get("valid"), r.get("section"), r.get("location"),
+             r.get("lat"), r.get("lon"), r.get("carrington"), r.get("area"),
+             r.get("mcintosh"), r.get("ll"), r.get("spots"), r.get("mag")]
+            for r in regions]
+    return "region", cols, rows
+
+
 _WRITERS = {
     "spectrogram": _spectrogram_rows,
     "events": _events_rows,
     "positions": _positions_rows,
     "earthmap": _earthmap_rows,
+    "regions": _regions_rows,
 }
 
 

@@ -70,7 +70,8 @@ def test_an_option_shared_by_several_sources_is_a_question():
 
 def test_a_bare_date_composes_an_overview():
     got = sources("2017-09-06")
-    assert [s for s, _ in got] == ["goes_xrs", "flares", "sdo_images", "soho_images"]
+    assert [s for s, _ in got] == ["goes_xrs", "flares", "solar_regions",
+                                   "sdo_images", "soho_images"]
     p = parse("2017-09-06", REG)
     assert "overview" in p.summary and "GOES XRS" in p.summary
 
@@ -78,13 +79,13 @@ def test_a_bare_date_composes_an_overview():
 def test_the_overview_drops_instruments_that_were_not_flying():
     got = [s for s, _ in sources("everything on 2003-10-28")]
     assert "sdo_images" not in got  # SDO launched in 2010
-    assert got == ["goes_xrs", "flares", "soho_images"]
+    assert got == ["goes_xrs", "flares", "solar_regions", "soho_images"]
 
 
 def test_asking_for_a_summary_by_name_needs_no_apology():
     p = parse("what happened yesterday", REG)
     assert p.ok and p.summary is None  # they asked; no need to explain
-    assert len(p.requests) == 4
+    assert len(p.requests) == summary_view.MAX_SOURCES
 
 
 def test_a_date_before_every_instrument_is_an_honest_error():

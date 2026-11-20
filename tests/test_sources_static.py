@@ -40,7 +40,13 @@ def _functions(module):
             members = [obj]
         for member in members:
             fn = getattr(member, "__func__", member)
-            if hasattr(fn, "__code__") and getattr(fn, "__module__", None) == module.__name__:
+            # Compiled from this file, not merely attributed to it: a
+            # @dataclass writes __init__/__repr__ whose globals live in the
+            # dataclasses module, and reading them here would report the
+            # plugin as using undefined names it never wrote.
+            if (hasattr(fn, "__code__")
+                    and getattr(fn, "__module__", None) == module.__name__
+                    and fn.__code__.co_filename == module.__file__):
                 yield fn
 
 

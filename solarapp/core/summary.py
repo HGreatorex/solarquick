@@ -22,7 +22,11 @@ KEYWORDS = [
     "space weather", "solar activity", "activity", "conditions", "everything",
     "all data", "all sources", "anything interesting", "recap", "digest",
 ]
-MAX_SOURCES = 4
+# Five, not four, since the Solar Region Summary joined: it is the cheapest
+# source in the app (one ~1 KB text file) and the most summary-like, so the
+# alternative was letting it push the coronagraph out of every modern
+# overview — a feature that quietly removes another one.
+MAX_SOURCES = 5
 
 
 def asked_for(query: str) -> bool:

@@ -3,81 +3,84 @@
 <head>
 <meta charset="utf-8">
 <title>SolarQuick</title>
+<link rel="icon" id="favicon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 <style>
   :root { color-scheme: dark; }
-  body { font-family: -apple-system, "Segoe UI", sans-serif; background:#0d1117; color:#e6edf3;
+  body { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size:14px; background:#000000; color:#ffffff;
          margin: 0; padding: 0; }
-  h1 { font-weight: 600; font-size: 1.4rem; } h1 span { color:#f0a832; }
+  h1 { margin:0; font-size:0; line-height:0; }
   form { display:flex; gap:.5rem; margin:1rem 0; }
   input { flex:1; padding:.7rem 1rem; font-size:1rem; border-radius:8px;
-          border:1px solid #30363d; background:#161b22; color:#e6edf3; }
+          border:1px solid #0000ff; background:#000000; color:#ffffff; }
   button { padding:.7rem 1.2rem; font-size:1rem; border-radius:8px; border:none;
-           background:#f0a832; color:#0d1117; font-weight:600; cursor:pointer; }
+           background:#ffff00; color:#000000; font-weight:600; cursor:pointer; }
   button:disabled { opacity:.5; }
-  #msg { color:#ff7b72; margin:.5rem 0; white-space:pre-wrap; }
-  #meta { color:#8b949e; font-size:.85rem; margin-top:.5rem; }
+  #msg { color:#ff0000; margin:.5rem 0; white-space:pre-wrap; }
+  #meta { color:#00ffff; font-size:.85rem; margin-top:.5rem; }
   #plot { width:100%; height:520px; }
-  .hint { color:#8b949e; font-size:.85rem; }
+  .hint { color:#00ffff; font-size:.85rem; }
   .imgview h2 { font-size:1rem; font-weight:600; text-align:center; margin:.5rem 0; }
   .imgview .mainimg { display:block; max-width:640px; width:100%; margin:0 auto;
-                      border-radius:8px; background:#161b22; cursor:zoom-in; }
-  .imgview .imgcap { text-align:center; color:#8b949e; font-size:.85rem; margin:.5rem 0; }
+                      border-radius:8px; background:#000000; cursor:zoom-in; }
+  .imgview .imgcap { text-align:center; color:#00ffff; font-size:.85rem; margin:.5rem 0; }
   .imgview .thumbs { display:flex; gap:.4rem; justify-content:center; flex-wrap:wrap; margin:.5rem 0; }
   .imgview .thumbs img { width:72px; height:72px; border-radius:6px; cursor:pointer;
-                         border:2px solid transparent; background:#161b22; }
-  .imgview .thumbs img.sel { border-color:#f0a832; }
-  .imgview .note { color:#d29922; font-size:.85rem; text-align:center; margin:.5rem 0; }
-  .regions .rsum { color:#8b949e; font-size:.82rem; margin:.5rem 0; }
-  .regions .rsum b { color:#e6edf3; font-weight:600; }
+                         border:2px solid transparent; background:#000000; }
+  .imgview .thumbs img.sel { border-color:#ffff00; }
+  .imgview .note { color:#ffff00; font-size:.85rem; text-align:center; margin:.5rem 0; }
+  .regions .rsum { color:#00ffff; font-size:.82rem; margin:.5rem 0; }
+  .regions .rsum b { color:#ffffff; font-weight:600; }
   .events h2 { font-size:1rem; font-weight:600; text-align:center; margin:.8rem 0 .4rem; }
   .events table { width:100%; border-collapse:collapse; font-size:.9rem; }
   .events th, .events td { padding:.35rem .6rem; text-align:left;
-                           border-bottom:1px solid #21262d; }
-  .events th { color:#8b949e; font-weight:600; }
+                           border-bottom:1px solid #0000ff; }
+  .events th { color:#00ffff; font-weight:600; }
   .events tbody tr { cursor:pointer; }
-  .events tbody tr:hover { background:#161b22; }
-  .events tr.sel { background:#1c2128; outline:1px solid #f0a832; }
-  .events td:first-child { color:#f0a832; font-weight:600; }
-  .evhint { color:#8b949e; font-size:.8rem; text-align:center; margin:.4rem 0 1rem; }
+  .events tbody tr:hover { background:#000000; }
+  .events tr.sel { background:#000000; outline:1px solid #ffff00; }
+  .events td:first-child { color:#ffff00; font-weight:600; }
+  .evhint { color:#00ffff; font-size:.8rem; text-align:center; margin:.4rem 0 1rem; }
   .movie .mspec { width:100%; height:440px; }
   .movie .mlc { width:100%; height:220px; }
   .movie .mctl { display:flex; gap:.6rem; align-items:center; margin:.2rem 0 .3rem; }
   .movie .mctl button { padding:.3rem .8rem; font-size:.9rem; min-width:2.8rem; }
-  .movie .mslider { flex:1; padding:0; border:none; background:none; accent-color:#f0a832; }
-  .movie .mtime { color:#8b949e; font-size:.85rem; font-variant-numeric:tabular-nums; }
-  .movie select { background:#161b22; color:#e6edf3; border:1px solid #30363d;
+  .movie .mslider { flex:1; padding:0; border:none; background:none; accent-color:#ffff00; }
+  .movie .mtime { color:#00ffff; font-size:.85rem; font-variant-numeric:tabular-nums; }
+  .movie select { background:#000000; color:#ffffff; border:1px solid #0000ff;
                   border-radius:6px; padding:.25rem; font-size:.8rem; }
   .dl { display:flex; gap:.4rem; justify-content:flex-end; align-items:center;
         margin:.1rem 0 1.2rem; }
   .dl button { padding:.3rem .7rem; font-size:.78rem; font-weight:500;
-               border-radius:6px; border:1px solid #30363d; background:#161b22;
-               color:#8b949e; cursor:pointer; }
-  .dl button:hover:not(:disabled) { color:#e6edf3; border-color:#8b949e; }
+               border-radius:6px; border:1px solid #0000ff; background:#000000;
+               color:#00ffff; cursor:pointer; }
+  .dl button:hover:not(:disabled) { color:#ffffff; border-color:#00ffff; }
   .dl button:disabled { opacity:.45; cursor:default; }
-  .dl .dlerr { color:#d29922; font-size:.78rem; margin-right:auto; }
+  .dl .dlerr { color:#ffff00; font-size:.78rem; margin-right:auto; }
 
   /* progress: what is being fetched, how long it usually takes, how long so far */
   #prog { margin:.8rem 0; display:none; }
   #prog.on { display:block; }
-  .prog-head { color:#e6edf3; font-size:.9rem; margin-bottom:.15rem; }
-  .prog-when { color:#8b949e; font-size:.82rem; margin-bottom:.6rem; }
+  .prog-head { color:#ffffff; font-size:.9rem; margin-bottom:.15rem; }
+  .prog-when { color:#00ffff; font-size:.82rem; margin-bottom:.6rem; }
   .prog-row { display:grid; grid-template-columns:1.1rem 1fr auto; gap:.5rem;
               align-items:baseline; padding:.3rem 0; font-size:.87rem; }
-  .prog-row .mark { color:#8b949e; }
-  .prog-row.done .mark { color:#58d6a3; }
-  .prog-row.failed .mark { color:#ff7b72; }
+  .prog-row .mark { color:#00ffff; }
+  .prog-row.done .mark { color:#00ff00; }
+  .prog-row.failed .mark { color:#ff0000; }
   .prog-row.queued { opacity:.55; }
-  .prog-row .what { color:#e6edf3; }
-  .prog-row .opts { color:#8b949e; }
-  .prog-row .t { color:#8b949e; font-variant-numeric:tabular-nums; font-size:.8rem; }
-  .prog-row .err { grid-column:2 / -1; color:#d29922; font-size:.8rem; }
-  .prog-bar { grid-column:2 / -1; height:3px; border-radius:2px; background:#21262d;
+  .prog-row .what { color:#ffffff; }
+  .prog-row .opts { color:#00ffff; }
+  .prog-row .t { color:#00ffff; font-variant-numeric:tabular-nums; font-size:.8rem; }
+  .prog-row .err { grid-column:2 / -1; color:#ffff00; font-size:.8rem; }
+  .prog-bar { grid-column:2 / -1; height:3px; border-radius:2px; background:#0000ff;
               overflow:hidden; }
-  .prog-bar i { display:block; height:100%; background:#f0a832; width:0;
+  .prog-bar i { display:block; height:100%; background:#ffff00; width:0;
                 transition:width .12s linear; }
-  .prog-row.done .prog-bar i { background:#58d6a3; }
-  .prog-row.failed .prog-bar i { background:#ff7b72; }
+  .prog-row.done .prog-bar i { background:#00ff00; }
+  .prog-row.failed .prog-bar i { background:#ff0000; }
   /* no estimate yet: a sweep, so it reads as "working", not as "60% done" */
   .prog-bar.unknown i { width:35% !important; animation:sweep 1.1s ease-in-out infinite; }
   @keyframes sweep { 0% {margin-left:-35%;} 100% {margin-left:100%;} }
@@ -86,81 +89,146 @@
 
   /* two panes: the form on the left, results on the right */
   .app { display:grid; grid-template-columns: 330px minmax(0, 1fr); min-height:100vh; }
-  aside { background:#0b0f14; border-right:1px solid #21262d; padding:1rem 1rem 2rem;
+  aside { background:#000000; border-right:1px solid #0000ff; padding:1rem 1rem 2rem;
           position:sticky; top:0; height:100vh; overflow-y:auto; box-sizing:border-box; }
   main { padding:1rem 1.5rem 2rem; min-width:0; }
   aside h1 { margin:.2rem 0 .8rem; }
   aside form { margin:.4rem 0 .3rem; }
   aside form input { padding:.55rem .7rem; font-size:.92rem; }
   aside form button { padding:.55rem .8rem; font-size:.92rem; }
-  aside details { border:1px solid #21262d; border-radius:8px; margin:.6rem 0; background:#0d1117; }
+  aside details { border:1px solid #0000ff; border-radius:8px; margin:.6rem 0; background:#000000; }
   aside summary { cursor:pointer; padding:.5rem .7rem; font-size:.88rem; font-weight:600;
-                  color:#e6edf3; list-style:none; }
-  aside summary::before { content:"▸ "; color:#8b949e; }
+                  color:#ffffff; list-style:none; }
+  aside summary::before { content:"▸ "; color:#00ffff; }
   aside details[open] summary::before { content:"▾ "; }
-  aside summary .cnt { color:#f0a832; font-weight:500; margin-left:.3rem; }
+  aside summary .cnt { color:#ffff00; font-weight:500; margin-left:.3rem; }
   .pane { padding:.2rem .7rem .7rem; display:flex; flex-direction:column; gap:.45rem; }
   .pane label.fld { display:grid; grid-template-columns:3.2rem 1fr; align-items:center;
-                    font-size:.82rem; color:#8b949e; gap:.4rem; }
+                    font-size:.82rem; color:#00ffff; gap:.4rem; }
   .pane input[type=datetime-local], .pane select {
-    padding:.35rem .45rem; font-size:.85rem; border-radius:6px; border:1px solid #30363d;
-    background:#161b22; color:#e6edf3; color-scheme:dark; flex:none; }
+    padding:.35rem .45rem; font-size:.85rem; border-radius:6px; border:1px solid #0000ff;
+    background:#000000; color:#ffffff; color-scheme:dark; flex:none; }
   .pane select:disabled { opacity:.45; }
   .row { display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; }
   .sbtn { padding:.3rem .6rem; font-size:.78rem; font-weight:500; border-radius:6px;
-          border:1px solid #30363d; background:#161b22; color:#c9d1d9; cursor:pointer; }
-  .sbtn:hover { border-color:#8b949e; color:#e6edf3; }
-  .chk { font-size:.84rem; color:#c9d1d9; display:flex; align-items:center; gap:.35rem; }
-  .chk input, .src input { flex:none; padding:0; accent-color:#f0a832; }
-  .tgroup { font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:#8b949e;
+          border:1px solid #0000ff; background:#000000; color:#ffffff; cursor:pointer; }
+  .sbtn:hover { border-color:#00ffff; color:#ffffff; }
+  .chk { font-size:.84rem; color:#ffffff; display:flex; align-items:center; gap:.35rem; }
+  .chk input, .src input { flex:none; padding:0; accent-color:#ffff00; }
+  .tgroup { font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:#00ffff;
             margin:.5rem 0 .1rem; }
   .src { position:relative; }
   .src .sline { display:flex; gap:.4rem; align-items:center; font-size:.84rem; padding:.12rem 0;
                 padding-right:1.4rem; cursor:pointer; }
   .src.off { opacity:.4; }
-  .src .exp { position:absolute; right:0; top:0; background:none; border:none; color:#8b949e;
+  .src .exp { position:absolute; right:0; top:0; background:none; border:none; color:#00ffff;
               padding:.1rem .3rem; font-size:.8rem; cursor:pointer; }
   .src.open .exp { transform:rotate(90deg); }
   .src .opts { display:none; flex-wrap:wrap; gap:.15rem .7rem; padding:.15rem 0 .35rem 1.4rem; }
   .src.open .opts { display:flex; }
-  .src .opts label { font-size:.78rem; color:#c9d1d9; display:flex; gap:.3rem; align-items:center;
+  .src .opts label { font-size:.78rem; color:#ffffff; display:flex; gap:.3rem; align-items:center;
                      cursor:pointer; }
-  .side-hint { color:#8b949e; font-size:.75rem; line-height:1.35; }
+  .side-hint { color:#00ffff; font-size:.75rem; line-height:1.35; }
   #loadrow { margin:.7rem 0; }
   #loadrow #load { flex:1; padding:.6rem; }
   .presets { margin-top:1rem; display:flex; flex-direction:column; gap:.35rem; }
-  .presets .lbl { font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:#8b949e; }
+  .presets .lbl { font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:#00ffff; }
   .presets button { text-align:left; padding:.5rem .7rem; font-size:.84rem; font-weight:500;
-                    background:#161b22; color:#e6edf3; border:1px solid #30363d; }
-  .presets button:hover { border-color:#f0a832; }
-  .presets button small { display:block; color:#8b949e; font-weight:400; font-size:.74rem; }
+                    background:#000000; color:#ffffff; border:1px solid #0000ff; }
+  .presets button:hover { border-color:#ffff00; }
+  .presets button small { display:block; color:#00ffff; font-weight:400; font-size:.74rem; }
 
   /* image grid: 1, 2, 3 in a row; 4 as 2×2; 5 as 3+2; 6 as 3+3; more in rows of 3 */
   .imgwrap { margin-bottom:1rem; }
   .imggrid { display:flex; flex-wrap:wrap; gap:.6rem; justify-content:center; }
-  .cell { background:#161b22; border:1px solid #21262d; border-radius:8px; overflow:hidden;
+  .cell { background:#000000; border:1px solid #0000ff; border-radius:8px; overflow:hidden;
           box-sizing:border-box; }
-  .cell .ctitle { font-size:.8rem; font-weight:600; padding:.35rem .6rem; color:#e6edf3; }
-  .cell .cimg { aspect-ratio:1; background:#0d1117; }
+  .cell .ctitle { font-size:.8rem; font-weight:600; padding:.35rem .6rem; color:#ffffff; }
+  .cell .cimg { aspect-ratio:1; background:#000000; }
   .cell img { width:100%; height:100%; display:block; object-fit:contain; cursor:zoom-in; }
-  .cell .ccap { font-size:.74rem; color:#8b949e; padding:.3rem .6rem;
+  .cell .ccap { font-size:.74rem; color:#00ffff; padding:.3rem .6rem;
                 font-variant-numeric:tabular-nums; }
   .transport { display:flex; gap:.5rem; align-items:center; margin:.6rem 0 .2rem; flex-wrap:wrap; }
   .transport button { padding:.3rem .75rem; font-size:.9rem; min-width:2.4rem; }
   .transport .tslider { flex:1; min-width:8rem; padding:0; border:none; background:none;
-                        accent-color:#f0a832; }
-  .transport .ttime { color:#8b949e; font-size:.82rem; font-variant-numeric:tabular-nums; }
-  .transport select { background:#161b22; color:#e6edf3; border:1px solid #30363d;
+                        accent-color:#ffff00; }
+  .transport .ttime { color:#00ffff; font-size:.82rem; font-variant-numeric:tabular-nums; }
+  .transport select { background:#000000; color:#ffffff; border:1px solid #0000ff;
                       border-radius:6px; padding:.25rem; font-size:.8rem; }
   .events .evbody { display:flex; gap:1rem; align-items:flex-start; }
   .events .flaredisk { width:300px; height:300px; flex:none; }
   .events .evtable { flex:1; max-height:320px; overflow-y:auto; }
+
+  /* ---- teletext ---------------------------------------------------------
+     Eight colours, square blocks, a blocky display face (VT323) only for
+     headings, bands and buttons; everything read closely stays in Plex Mono.
+     Blue is a band and gridline colour, never text (2.4:1 on black). */
+  * { border-radius:0 !important; }
+  .tt { font-family:"VT323", ui-monospace, monospace; font-weight:400; line-height:1; }
+  .tt-head { padding:.4rem 1.2rem 0; border-bottom:6px solid #0000ff; }
+  .tt-row { display:flex; flex-wrap:wrap; justify-content:space-between; gap:.2rem 1.5rem;
+            font-family:"VT323", monospace; font-size:24px; line-height:1; }
+  .tt-band { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
+             gap:.6rem 1.5rem; padding:.7rem 0 .8rem; }
+  .tt-band .tag { font-family:"VT323", monospace; font-size:24px; color:#00ff00; line-height:1; }
+  .c { color:#00ffff; } .y { color:#ffff00; } .g { color:#00ff00; }
+  .app { min-height:calc(100vh - 110px); }
+  aside { border-right:2px solid #0000ff; height:100vh; }
+  aside details { border:none; background:#000000; }
+  aside summary { background:#0000ff; color:#ffff00; font-family:"VT323", monospace;
+                  font-size:22px; font-weight:400; padding:.3rem .6rem; line-height:1; }
+  aside summary::before { color:#ffffff; }
+  aside summary .cnt { color:#ffffff; font-size:18px; }
+  .pane { padding:.5rem 0 .2rem; }
+  input, .pane input[type=datetime-local], .pane select, .transport select, .movie select {
+    background:#000000; color:#ffff00; border:2px solid #00ffff; }
+  input::placeholder { color:#00ffff; opacity:1; }
+  .pane label.fld { color:#00ffff; }
+  .chk input, .src input, input[type=checkbox] { accent-color:#00ff00; }
+  input[type=range] { border:none; }
+  button { font-family:"VT323", monospace; font-size:22px; font-weight:400; }
+  #go { background:#00ff00; color:#000000; }
+  .sbtn { font-family:"IBM Plex Mono", monospace; font-size:.78rem; background:#000000;
+          color:#ffffff; border:2px solid #ffffff; }
+  #loadrow #load { font-size:28px; padding:.4rem; }
+  .tgroup { font-family:"VT323", monospace; font-size:19px; letter-spacing:0;
+            text-transform:uppercase; color:#ff00ff; }
+  .src .sline, .src .opts label { color:#ffffff; }
+  .presets .lbl { font-family:"VT323", monospace; font-size:20px; letter-spacing:0; color:#ffffff; }
+  .presets button { border:none; color:#000000; font-size:22px; line-height:1.05; }
+  .presets button small { color:#000000; font-family:"IBM Plex Mono", monospace; font-size:.72rem; }
+  .presets button:nth-of-type(1) { background:#ff0000; }
+  .presets button:nth-of-type(2) { background:#00ff00; }
+  .presets button:nth-of-type(3) { background:#ffff00; }
+  .presets button:nth-of-type(4) { background:#00ffff; }
+  .presets button:hover { outline:2px solid #ffffff; }
+  .cell { border:none; background:#000000; }
+  .cell .ctitle { background:#0000ff; color:#ffff00; font-family:"VT323", monospace;
+                  font-size:21px; font-weight:400; line-height:1; padding:.3rem .55rem; }
+  .cell .ccap { color:#00ffff; padding:.3rem .1rem; }
+  .transport button { font-size:22px; }
+  .events h2, .imgview h2 { font-family:"VT323", monospace; font-size:24px; font-weight:400;
+                            background:#0000ff; color:#ffff00; text-align:left; padding:.3rem .6rem;
+                            line-height:1; }
+  .events th { font-family:"VT323", monospace; font-size:20px; font-weight:400; color:#ffffff; }
+  .events td:nth-child(2) { color:#ffffff; } .events td:nth-child(3) { color:#00ffff; }
+  .events td:nth-child(4) { color:#00ff00; } .events td:nth-child(5) { color:#ff00ff; }
+  .events th, .events td { border-bottom:2px solid #0000ff; }
+  .events tbody tr:hover { background:#000000; outline:1px solid #00ffff; }
+  .prog-head { font-family:"VT323", monospace; font-size:22px; color:#ffff00; }
+  .dl button { font-family:"IBM Plex Mono", monospace; color:#00ffff; border:2px solid #00ffff; }
+  .dl button:hover:not(:disabled) { color:#ffff00; border-color:#ffff00; }
 </style>
 </head>
 <body>
+<header class="tt-head">
+  <div class="tt-row"><span>P100</span><span class="c">SOLARQUICK</span><span>100</span>
+    <span class="y" id="clock"></span></div>
+  <div class="tt-band"><h1 id="logo" aria-label="SolarQuick">SolarQuick</h1>
+    <span class="tag">SOLAR DATA QUICKLOOK</span></div>
+</header>
 <div class="app">
 <aside>
-  <h1>Solar<span>Quick</span></h1>
   <form id="f">
     <input id="q" placeholder="e.g. biggest flare since 2014" autocomplete="off">
     <button id="go">Go</button>
@@ -386,7 +454,7 @@ async function load(label, note) {
     label: label || (requests.length ? "your selection" : "the default view"),
   };
   currentQuery = label || "";
-  msg.textContent = note || ""; msg.style.color = note ? "#d29922" : "";
+  msg.textContent = note || ""; msg.style.color = note ? "#ffff00" : "";
   meta.textContent = "";
   stopMovies();
   plotDiv.innerHTML = "";
@@ -443,7 +511,54 @@ const PRESETS = [
 
 function typed(text) { q.value = text; movieBox.checked = false; f.requestSubmit(); }
 
+// -- the logo: SolarQuick in teletext mosaic blocks ------------------------
+// '#' ink, 'y' yellow, 'r' red. The S is a lightning bolt; the Q is the Sun,
+// with rays above the cap line and its tail a flare dropping below it.
+const LOGO = {
+  S: ["..yyyy", ".yyy..", "yyy...", ".yyyy.", "..yyyy", "...yyy", "..yyy.", ".yy...", "y....."],
+  O: [".####.", "##..##", "##..##", "##..##", "##..##", "##..##", "##..##", "##..##", ".####."],
+  L: ["##....", "##....", "##....", "##....", "##....", "##....", "##....", "##....", "######"],
+  A: [".####.", "##..##", "##..##", "##..##", "######", "##..##", "##..##", "##..##", "##..##"],
+  R: ["#####.", "##..##", "##..##", "##..##", "#####.", "##.##.", "##..##", "##..##", "##..##"],
+  Q: [".....y.....", ".y.......y.", "....yyy....", "...yyyyy...", "..yyyyyyy..", "y.yyyyyyy.y",
+      "..yyyyyyy..", "...yyyyy...", ".y..yyyr...", "......rrr..", ".....y..rrr"],
+  U: ["##..##", "##..##", "##..##", "##..##", "##..##", "##..##", "##..##", "##..##", ".####."],
+  I: ["######", "..##..", "..##..", "..##..", "..##..", "..##..", "..##..", "..##..", "######"],
+  C: [".#####", "##....", "##....", "##....", "##....", "##....", "##....", "##....", ".#####"],
+  K: ["##..##", "##.##.", "####..", "###...", "###...", "####..", "##.##.", "##..##", "##..##"],
+};
+
+function mosaicSvg(word, cap, ink = "#ffffff") {
+  const px = Math.max(2, Math.round(cap / 9)), gap = Math.max(1, Math.round(px / 8));
+  const cell = px + gap, letterGap = Math.round(px * 1.1);
+  const fill = {"#": ink, y: "#ffff00", r: "#ff0000"};
+  const rects = [];
+  let x = 0;
+  for (const ch of word) {
+    const rows = LOGO[ch], top = rows.length === 11 ? 0 : cell;  // the Q overhangs a row each way
+    rows.forEach((row, r) => [...row].forEach((c, k) => {
+      if (c !== ".") rects.push(`<rect x="${x + k * cell}" y="${top + r * cell}" ` +
+                               `width="${px}" height="${px}" fill="${fill[c]}"/>`);
+    }));
+    x += rows[0].length * cell + letterGap;
+  }
+  const w = x - letterGap, h = 11 * cell;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" ` +
+         `height="${h}" shape-rendering="crispEdges" aria-hidden="true">${rects.join("")}</svg>`;
+}
+
+// the Ceefax header clock: "Mon 23 Nov 11:12/04", UT
+function tickClock() {
+  const d = new Date(), DAY = "Sun Mon Tue Wed Thu Fri Sat".split(" "),
+        MON = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+  $("clock").textContent = `${DAY[d.getUTCDay()]} ${pad(d.getUTCDate())} ${MON[d.getUTCMonth()]} ` +
+    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}/${pad(d.getUTCSeconds())}`;
+}
+
 function init() {
+  $("logo").innerHTML = mosaicSvg("SOLARQUICK", 40);
+  $("favicon").href = "data:image/svg+xml," + encodeURIComponent(mosaicSvg("Q", 64));
+  tickClock(); setInterval(tickClock, 1000);
   PRESETS.forEach(p => {
     const b = document.createElement("button");
     b.type = "button";
@@ -564,8 +679,11 @@ function escapeHtml(s) {
 
 const plotDiv = document.getElementById("plot");
 
+// teletext: black ground, white text, series in the remaining six colours
 const DARK = {
-  paper_bgcolor: "#0d1117", plot_bgcolor: "#161b22", font: {color:"#e6edf3"},
+  paper_bgcolor: "#000000", plot_bgcolor: "#000000",
+  font: {color: "#ffffff", family: "'IBM Plex Mono', ui-monospace, monospace"},
+  colorway: ["#ffff00", "#00ffff", "#00ff00", "#ff00ff", "#ff0000", "#ffffff"],
 };
 
 // spectral movies and the image grid loop on intervals; a new result must stop them
@@ -592,7 +710,7 @@ function render(d) {
   const notes = (d.kind === "multi" ? [d.note, ...items.map(i => i.note)] : [d.note]).filter(Boolean);
   // the wrapper note already carries the spelling corrections (server-side),
   // so d.note is the single source of truth for "what we read your query as"
-  if (notes.length) { msg.textContent = [...new Set(notes)].join("\n"); msg.style.color = "#d29922"; }
+  if (notes.length) { msg.textContent = [...new Set(notes)].join("\n"); msg.style.color = "#ffff00"; }
   const bits = [];
   if (stats.points) bits.push(`${stats.points} points`);
   if (stats.frames) bits.push(`${stats.frames} frame(s)`);
@@ -738,17 +856,18 @@ function renderEvents(d, stats) {
 }
 
 // where the flares were: helioprojective arcsec over a mean 960″ radius
-const FLARE_STYLE = {X: ["#e2604d", 18], M: ["#f0a832", 13], C: ["#4c9aff", 9]};
+const FLARE_STYLE = {X: ["#ff0000", 18], M: ["#ffff00", 13], C: ["#00ffff", 9]};
+const FLARE_OTHER = ["#ffffff", 6];
 function plotFlareDisk(el, evs, open) {
   const R = 960;
-  const style = ev => FLARE_STYLE[(ev.class || "?")[0]] || ["#8b949e", 6];
+  const style = ev => FLARE_STYLE[(ev.class || "?")[0]] || FLARE_OTHER;
   Plotly.newPlot(el, [{
     x: evs.map(ev => ev.x / R), y: evs.map(ev => ev.y / R),
     mode: "markers+text", text: evs.map(ev => ev.class), textposition: "top center",
-    textfont: {size: 9, color: "#c9d1d9"},
+    textfont: {size: 9, color: "#ffffff"},
     marker: {size: evs.map(ev => style(ev)[1]), color: evs.map(ev => style(ev)[0]),
              symbol: evs.map(ev => ev.position_from ? "diamond" : "circle"),
-             line: {color: evs.map(ev => ev.selected ? "#e6edf3" : "#0d1117"),
+             line: {color: evs.map(ev => ev.selected ? "#ffffff" : "#000000"),
                     width: evs.map(ev => ev.selected ? 2 : 1)}, opacity: .9},
     customdata: evs.map(ev => ev.query),
     hovertext: evs.map(ev => `${ev.class} · peak ${ev.peak.slice(11, 16)} UT<br>` +
@@ -762,9 +881,9 @@ function plotFlareDisk(el, evs, open) {
     xaxis: {range: [-1.2, 1.2], visible: false},
     yaxis: {range: [-1.2, 1.2], visible: false, scaleanchor: "x", scaleratio: 1},
     shapes: [{type: "circle", xref: "x", yref: "y", x0: -1, x1: 1, y0: -1, y1: 1,
-              line: {color: "#30363d", width: 1}, fillcolor: "#161b22", layer: "below"}],
+              line: {color: "#0000ff", width: 1}, fillcolor: "#000000", layer: "below"}],
     annotations: [["N", 0, 1.1], ["S", 0, -1.1], ["E", -1.1, 0], ["W", 1.1, 0]].map(
-      ([t, x, y]) => ({x, y, text: t, showarrow: false, font: {color: "#8b949e", size: 10}})),
+      ([t, x, y]) => ({x, y, text: t, showarrow: false, font: {color: "#00ffff", size: 10}})),
     margin: {t: 30, b: 5, l: 5, r: 5},
   }, {responsive: true, displayModeBar: false});
   el.on("plotly_click", ev => open(ev.points[0].customdata));
@@ -776,10 +895,10 @@ function plotFlareDisk(el, evs, open) {
 // on one snapshot, then the table of that snapshot's rows.
 
 const COMPLEXITY = {
-  "alpha":      {color: "#8b949e", label: "α  unipolar"},
-  "beta":       {color: "#4c9aff", label: "β  bipolar"},
-  "beta-gamma": {color: "#f0a832", label: "βγ  mixed polarities"},
-  "delta":      {color: "#e2604d", label: "δ  flare-productive"},
+  "alpha":      {color: "#00ff00", label: "α  unipolar"},
+  "beta":       {color: "#00ffff", label: "β  bipolar"},
+  "beta-gamma": {color: "#ffff00", label: "βγ  mixed polarities"},
+  "delta":      {color: "#ff0000", label: "δ  flare-productive"},
 };
 
 function renderRegions(d, stats) {
@@ -836,10 +955,10 @@ function plotRegionDisk(el, d, rows) {
     traces.push({
       x: rows.map(r => r.x), y: rows.map(r => r.y),
       mode: "lines+markers+text", text: rows.map(r => r.valid.slice(5)),
-      textposition: "top center", textfont: {size: 9, color: "#8b949e"},
-      line: {color: "#f0a832", width: 1, dash: "dot"},
+      textposition: "top center", textfont: {size: 9, color: "#00ffff"},
+      line: {color: "#ffff00", width: 1, dash: "dot"},
       marker: {size: rows.map(size), color: rows.map(r => COMPLEXITY[r.complexity].color),
-               line: {color: "#0d1117", width: 1}},
+               line: {color: "#000000", width: 1}},
       hovertemplate: "%{customdata}", customdata: rows.map(hover), showlegend: false,
     });
   } else {
@@ -850,26 +969,26 @@ function plotRegionDisk(el, d, rows) {
       traces.push({
         x: group.map(r => r.x), y: group.map(r => r.y), name: style.label,
         mode: "markers+text", text: group.map(r => r.nmbr),
-        textposition: "top center", textfont: {size: 10, color: "#e6edf3"},
+        textposition: "top center", textfont: {size: 10, color: "#ffffff"},
         marker: {size: group.map(size), color: style.color,
                  symbol: group.map(r => r.behind ? "circle-open" : "circle"),
-                 line: {color: "#0d1117", width: 1}},
+                 line: {color: "#000000", width: 1}},
         hovertemplate: "%{customdata}", customdata: group.map(hover),
       });
     });
     if (plages.length) traces.push({
       x: plages.map(r => r.x), y: plages.map(r => r.y), name: "plage (no spots)",
-      mode: "markers", marker: {size: 7, color: "#30363d", symbol: "circle-open",
-                                line: {color: "#8b949e", width: 1}},
+      mode: "markers", marker: {size: 7, color: "#0000ff", symbol: "circle-open",
+                                line: {color: "#00ffff", width: 1}},
       hovertemplate: "%{customdata}", customdata: plages.map(hover),
     });
   }
 
   const edge = {type: "circle", xref: "x", yref: "y", x0: -1, x1: 1, y0: -1, y1: 1,
-                line: {color: "#30363d", width: 1}, fillcolor: "#161b22", layer: "below"};
+                line: {color: "#0000ff", width: 1}, fillcolor: "#000000", layer: "below"};
   const compass = [["N", 0, 1.09], ["S", 0, -1.09], ["E", -1.09, 0], ["W", 1.09, 0]]
     .map(([t, x, y]) => ({x, y, text: t, showarrow: false,
-                          font: {color: "#8b949e", size: 11}}));
+                          font: {color: "#00ffff", size: 11}}));
   Plotly.newPlot(el, traces, {
     ...DARK,
     xaxis: {range: [-1.2, 1.2], visible: false},
@@ -926,37 +1045,40 @@ function regionExtras(rows) {
 }
 
 function plotTimeseries(el, d, compact, markers) {
+  // GOES keeps the palette's convention: XRS-B (the flare class) yellow, XRS-A cyan
+  const fixed = name => /XRS-B|long/i.test(name) ? "#ffff00" : /XRS-A|short/i.test(name) ? "#00ffff" : undefined;
   const traces = d.series.map(s => ({
-    x: s.times || s.x, y: s.values, name: s.name, mode: "lines", line: {width: 1.5}
+    x: s.times || s.x, y: s.values, name: s.name, mode: "lines",
+    line: {width: 1.5, color: fixed(s.name || "")}
   }));
   const shapes = [], annotations = [];
   (d.bands || []).forEach((b, i) => {
     if (i % 2) shapes.push({type:"rect", xref:"paper", x0:0, x1:1, yref:"y",
-      y0:b.y0, y1:b.y1, fillcolor:"rgba(255,255,255,0.04)", line:{width:0}});
+      y0:b.y0, y1:b.y1, fillcolor:"rgba(0,0,255,0.28)", line:{width:0}});
     annotations.push({xref:"paper", x:1.005, xanchor:"left", yref:"y",
       y: Math.log10(Math.sqrt(b.y0*b.y1)), text:b.label, showarrow:false,
-      font:{color:"#8b949e", size:11}});
+      font:{color:"#00ffff", size:11}});
   });
   const isTimeAxis = d.series.some(s => s.times);
   if (isTimeAxis) (markers || []).forEach(mk => {
     shapes.push({type:"line", x0:mk.t, x1:mk.t, xref:"x", yref:"paper", y0:0, y1:1,
-      line:{color:"#e2604d", width:1, dash:"dot"}});
+      line:{color:"#ff0000", width:1, dash:"dot"}});
     annotations.push({x:mk.t, xref:"x", yref:"paper", y:1.02, text:mk.label,
-      showarrow:false, font:{color:"#e2604d", size:10}});
+      showarrow:false, font:{color:"#ff0000", size:10}});
   });
   // the image grid's timeline cursor, on every time axis below it
   let cursorIdx = -1;
   if (isTimeAxis && gridCursor) {
     cursorIdx = shapes.length;
     shapes.push({type:"line", xref:"x", yref:"paper", x0: gridCursor.time(),
-      x1: gridCursor.time(), y0:0, y1:1, line:{color:"#f0a832", width:1.5}});
+      x1: gridCursor.time(), y0:0, y1:1, line:{color:"#ff00ff", width:2}});
   }
   Plotly.newPlot(el, traces, {
     ...DARK,
     title: {text: d.title, font:{size: compact ? 12 : 14}},
-    xaxis: {title: d.xaxis?.label, gridcolor:"#30363d"},
+    xaxis: {title: d.xaxis?.label, gridcolor:"#0000ff"},
     yaxis: {title: d.yaxis?.label, type: d.yaxis?.type || "linear",
-            gridcolor:"#30363d", exponentformat:"power",
+            gridcolor:"#0000ff", exponentformat:"power",
             range: d.yaxis?.range ? d.yaxis.range.map(Math.log10) : undefined},
     shapes, annotations,
     legend: {orientation:"h", y: compact ? -0.3 : -0.2},
@@ -976,8 +1098,8 @@ function plotSpectrogram(el, d) {
   }], {
     ...DARK,
     title: {text: d.title, font:{size:12}},
-    xaxis: {title: d.xaxis?.label, gridcolor:"#30363d"},
-    yaxis: {title: d.yaxis?.label, type: d.yaxis?.type || "linear", gridcolor:"#30363d"},
+    xaxis: {title: d.xaxis?.label, gridcolor:"#0000ff"},
+    yaxis: {title: d.yaxis?.label, type: d.yaxis?.type || "linear", gridcolor:"#0000ff"},
     margin: {t:35, r:20, b:30}
   }, {responsive: true});
 }
@@ -985,8 +1107,8 @@ function plotSpectrogram(el, d) {
 function plotPositions(el, d) {
   const traces = [{
     x: [0], y: [0], mode: "markers+text", text: ["Sun"], textposition: "bottom center",
-    textfont: {size: 11, color: "#8b949e"}, hoverinfo: "skip",
-    marker: {symbol: "star", size: 16, color: "#f0a832"},
+    textfont: {size: 11, color: "#00ffff"}, hoverinfo: "skip",
+    marker: {symbol: "star", size: 16, color: "#ffff00"},
   }];
   d.bodies.forEach(b => {
     if (b.trail)
@@ -994,7 +1116,7 @@ function plotPositions(el, d) {
         line: {width: 1.2, color: b.color}, opacity: 0.45, hoverinfo: "skip"});
     traces.push({
       x: [b.x], y: [b.y], mode: "markers+text", text: [b.name],
-      textposition: "top center", textfont: {size: 11, color: "#e6edf3"},
+      textposition: "top center", textfont: {size: 11, color: "#ffffff"},
       marker: {size: b.type === "planet" ? 10 : 8, color: b.color,
                symbol: b.type === "planet" ? "circle" : "diamond"},
       hovertemplate: `${b.name}<br>r = ${b.r.toFixed(3)} AU` +
@@ -1003,14 +1125,14 @@ function plotPositions(el, d) {
   });
   const shapes = d.bodies.filter(b => b.type === "planet").map(b => ({
     type: "circle", xref: "x", yref: "y", x0: -b.r, x1: b.r, y0: -b.r, y1: b.r,
-    line: {color: "#30363d", width: 1, dash: "dot"},
+    line: {color: "#0000ff", width: 1, dash: "dot"},
   }));
   const R = Math.max(...d.bodies.map(b => b.r)) * 1.3;
   Plotly.newPlot(el, traces, {
     ...DARK,
     title: {text: d.title, font: {size: 13}},
-    xaxis: {range: [-R, R], gridcolor: "#21262d", zeroline: false, title: "AU"},
-    yaxis: {range: [-R, R], gridcolor: "#21262d", zeroline: false,
+    xaxis: {range: [-R, R], gridcolor: "#0000ff", zeroline: false, title: "AU"},
+    yaxis: {range: [-R, R], gridcolor: "#0000ff", zeroline: false,
             scaleanchor: "x", scaleratio: 1},
     shapes, showlegend: false, margin: {t: 40, r: 20},
   }, {responsive: true});
@@ -1025,17 +1147,17 @@ function plotEarthmap(el, d) {
   }));
   (d.lines || []).forEach(l => traces.push({
     type: "scattergeo", mode: "lines", lon: l.lon, lat: l.lat,
-    line: {color: "#f0a832", width: 1.5}, name: l.name,
+    line: {color: "#ffff00", width: 1.5}, name: l.name,
     hoverinfo: "skip", showlegend: false,
   }));
   if (d.track) traces.push({
     type: "scattergeo", mode: "lines+markers", lon: d.track.lon, lat: d.track.lat,
-    line: {color: "#e2604d", width: 1.5, dash: "dot"}, marker: {size: 3},
+    line: {color: "#ff0000", width: 1.5, dash: "dot"}, marker: {size: 3},
     name: d.track.name, hoverinfo: "skip", showlegend: false,
   });
   (d.points || []).forEach(p => traces.push({
     type: "scattergeo", mode: "markers", lon: [p.lon], lat: [p.lat],
-    marker: {symbol: "star", size: 14, color: "#f0a832"},
+    marker: {symbol: "star", size: 14, color: "#ffff00"},
     hovertemplate: `${p.name}<br>${p.lat.toFixed(1)}°, ${p.lon.toFixed(1)}°<extra></extra>`,
     showlegend: false,
   }));
@@ -1043,13 +1165,13 @@ function plotEarthmap(el, d) {
     ...DARK,
     title: {text: d.title, font: {size: 13}},
     geo: {
-      projection: {type: "natural earth"}, bgcolor: "#0d1117",
-      showcoastlines: true, coastlinecolor: "#8b949e", coastlinewidth: 0.7,
-      showland: true, landcolor: "#2d333b",
-      showocean: true, oceancolor: "#161b22",
+      projection: {type: "natural earth"}, bgcolor: "#000000",
+      showcoastlines: true, coastlinecolor: "#00ffff", coastlinewidth: 0.7,
+      showland: true, landcolor: "#0000ff",
+      showocean: true, oceancolor: "#000000",
       showcountries: false, showframe: false,
-      lataxis: {showgrid: true, gridcolor: "#21262d", dtick: 30},
-      lonaxis: {showgrid: true, gridcolor: "#21262d", dtick: 60},
+      lataxis: {showgrid: true, gridcolor: "#0000ff", dtick: 30},
+      lonaxis: {showgrid: true, gridcolor: "#0000ff", dtick: 60},
     },
     margin: {t: 40, b: 10, l: 10, r: 10},
   }, {responsive: true});
@@ -1073,14 +1195,14 @@ function renderMovie(d, stats, markers) {
   const spec = box.querySelector(".mspec"), lc = box.querySelector(".mlc"),
         play = box.querySelector(".mplay"), slider = box.querySelector(".mslider"),
         label = box.querySelector(".mtime"), fps = box.querySelector(".mfps");
-  const n = d.frames.length, grid = "#30363d";
+  const n = d.frames.length, grid = "#0000ff";
   slider.max = n - 1;
   const ylog = d.yaxis?.type === "log";
   Plotly.newPlot(spec, [
     {x: d.wavelengths, y: d.frames[0], name: `start ${utc(d.times[0]).slice(11)} UT`,
-     mode: "lines", line: {width: 1, color: "#6e7681"}, hoverinfo: "skip"},
+     mode: "lines", line: {width: 1, color: "#00ffff"}, hoverinfo: "skip"},
     {x: d.wavelengths, y: d.frames[0], name: "spectrum", mode: "lines",
-     line: {width: 1.3, color: "#f0a832"}},
+     line: {width: 1.3, color: "#ffff00"}},
   ], {
     ...DARK,
     title: {text: d.title, font: {size: 14}},
@@ -1094,16 +1216,16 @@ function renderMovie(d, stats, markers) {
 
   const L = d.lightcurve;
   const shapes = [{type: "line", xref: "x", yref: "paper", x0: d.times[0], x1: d.times[0],
-                   y0: 0, y1: 1, line: {color: "#f0a832", width: 1.5}}];
+                   y0: 0, y1: 1, line: {color: "#ff00ff", width: 2}}];
   const annotations = [];
   (markers || []).forEach(mk => {
     shapes.push({type: "line", x0: mk.t, x1: mk.t, xref: "x", yref: "paper", y0: 0, y1: 1,
-      line: {color: "#e2604d", width: 1, dash: "dot"}});
+      line: {color: "#ff0000", width: 1, dash: "dot"}});
     annotations.push({x: mk.t, xref: "x", yref: "paper", y: 1.04, text: mk.label,
-      showarrow: false, font: {color: "#e2604d", size: 10}});
+      showarrow: false, font: {color: "#ff0000", size: 10}});
   });
   Plotly.newPlot(lc, [{x: L.times, y: L.values, name: L.name, mode: "lines",
-                       line: {width: 1.5, color: "#58a6ff"}}], {
+                       line: {width: 1.5, color: "#00ffff"}}], {
     ...DARK,
     title: {text: L.name, font: {size: 12}},
     xaxis: {gridcolor: grid},

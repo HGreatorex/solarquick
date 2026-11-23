@@ -69,6 +69,12 @@ solarapp/
 
 ## The two-pane UI
 
+Look: teletext. Only the eight teletext colours; VT323 for headings, bands and
+buttons, IBM Plex Mono for everything read closely; blue is for bands and
+gridlines, never text. The header is a Ceefax page line with a live UT clock
+and the mosaic logo (bolt S, sun Q with a flare tail) drawn from bitmaps in
+`LOGO`, which also makes the favicon.
+
 Left: a search box, start/end pickers (typed or calendar, ±day buttons), image
 options (crop around the flare, frame count, stills or movie), the instrument
 tree built from `/api/sources` (sources not observing in the window are greyed),

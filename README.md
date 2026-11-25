@@ -380,8 +380,10 @@ The **STATS** button (or `/#stats`) opens a statistics page: pick a period (up t
 a flare floor and the panels, then **RUN**. S1 monthly flare rates with sunspot number,
 S2 flare-size distribution with a power-law fit, S4 NOAA M/X forecast verification
 (reliability, ROC, Brier skill), S5 region productivity. **S3 superposed epoch** (needs
-sunpy) stacks GOES curves around chosen flares. Data come from NOAA's daily archives;
-the first load of a year takes a few minutes, then it is cached on disk.
+sunpy) stacks GOES curves around chosen flares. Data come from NOAA's daily archives
+(about 1,100 small files a year, downloaded 32 at a time): the first load of a year takes
+about 20 s, then it is cached on disk. **Last 365 d** / **Last 5 y** run straight away;
+starting a new run cancels one in progress.
 
 ## Exporting data
 

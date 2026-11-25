@@ -25,7 +25,7 @@ import math
 import re
 import time
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -46,8 +46,8 @@ URLS = {
 SWPC = "https://services.swpc.noaa.gov"
 FIRST_DAY = date(1996, 7, 31)     # first archived Edited Events file
 MAX_DAYS = 4018          # 11 years: one solar cycle
-WORKERS = 8
-RETRIES = 2
+WORKERS = 32             # NGDC serves ~50 small files/s at this concurrency
+RETRIES = 3
 SETTLED = 4              # days after which an archive file is final
 MISSING_IS_FINAL = 30    # a 404 this old is a real gap, not lag
 OLD_SCALE = 0.7          # GOES 8–15 XRS-B operational scaling
@@ -64,7 +64,7 @@ def _cache_path(kind: str, day: date) -> Path:
 
 
 def _get_text(url: str) -> str | None:
-    r = httpclient.session().get(url, timeout=(5, 15))   # NGDC sometimes hangs; don't wait 30 s
+    r = httpclient.wide_session(WORKERS).get(url, timeout=(3.05, 10))   # a stalled connect rarely recovers: retry it fast
     if r.status_code == 404:
         return None
     r.raise_for_status()
@@ -113,13 +113,52 @@ def daily_text(kind: str, day: date, today: date | None = None) -> str | None:
     return text
 
 
-def load_days(kind: str, days: list[date], progress: Progress | None = None
-              ) -> tuple[dict[date, str], list[date], list[date]]:
+Fetched = dict  # {(kind, day): (text | None, error | None)}
+
+
+def _event_days(days: list[date]) -> list[date]:
+    # a file holds events by *begin* day, so the day before can hold a peak in the window
+    return [days[0] - timedelta(days=1)] + days if days[0] > FIRST_DAY else days
+
+
+def _rsga_days(days: list[date]) -> list[date]:
+    # day-3 forecasts for the first target were issued three days before it
+    return [d for d in [days[0] - timedelta(days=k) for k in (3, 2, 1)] + days if d >= FIRST_DAY]
+
+
+def _srs_days(days: list[date]) -> list[date]:
+    return [d - timedelta(days=1) for d in days]   # regions as of the start of each day
+
+
+def prefetch(jobs: dict[str, list[date]], progress: Progress | None = None) -> Fetched:
+    """Read every (kind, day) through one pool, so the archives download together."""
+    todo = [(k, d) for k, ds in jobs.items() for d in dict.fromkeys(ds)]
+    out: Fetched = {}
+
+    def one(kd):
+        try:
+            return kd, daily_text(*kd), None
+        except Exception as e:  # noqa: BLE001 — reported by load_days
+            return kd, None, e
+
+    with ThreadPoolExecutor(WORKERS) as pool:
+        for i, fut in enumerate(as_completed([pool.submit(one, kd) for kd in todo]), 1):
+            kd, text, err = fut.result()
+            out[kd] = (text, err)
+            if progress and (i == 1 or i % 10 == 0 or i == len(todo)):
+                progress("archive files", i, len(todo))
+    return out
+
+
+def load_days(kind: str, days: list[date], progress: Progress | None = None,
+              pre: Fetched | None = None) -> tuple[dict[date, str], list[date], list[date]]:
     """{day: text}, days with no file, days that could not be read."""
     texts, absent, failed = {}, [], []
     done = 0
 
     def one(d):
+        if pre is not None and (kind, d) in pre:
+            return (d, *pre[(kind, d)])
         try:
             return d, daily_text(kind, d), None
         except Exception as e:  # noqa: BLE001
@@ -134,7 +173,7 @@ def load_days(kind: str, days: list[date], progress: Progress | None = None
                 absent.append(d)
             else:
                 texts[d] = text
-            if progress and (done == 1 or done % 5 == 0 or done == len(days)):
+            if progress and pre is None and (done == 1 or done % 5 == 0 or done == len(days)):
                 progress(kind, done, len(days))
     return texts, sorted(absent), sorted(failed)
 
@@ -266,12 +305,10 @@ class Catalogue:
 
 
 def catalogue(start: date, end: date, progress: Progress | None = None,
-              today: date | None = None) -> Catalogue:
+              today: date | None = None, pre: Fetched | None = None) -> Catalogue:
     today = today or datetime.now(timezone.utc).date()
     days = day_range(start, end)
-    # a file holds events by *begin* day, so the day before can hold a peak in the window
-    want = [days[0] - timedelta(days=1)] + days if days[0] > FIRST_DAY else days
-    texts, absent, failed = load_days("events", want, progress)
+    texts, absent, failed = load_days("events", _event_days(days), progress, pre)
     events = [e for d, t in texts.items() for e in parse_events(t, d)]
     covered = {d for d in days if d in texts}
     missing = {d for d in days if d not in texts and (today - d).days <= 6}
@@ -447,11 +484,10 @@ def parse_rsga(text: str) -> list[tuple[date, date, int, int, int]]:
     return [(issued, first + timedelta(days=k), k + 1, pm[k], px[k]) for k in range(3)]
 
 
-def forecasts(days: list[date], progress: Progress | None = None
+def forecasts(days: list[date], progress: Progress | None = None, pre: Fetched | None = None
               ) -> tuple[dict[tuple[date, int], tuple[int, int]], str | None]:
     """{(target, lead): (pM, pX)} for targets in `days`; issue days start 3 before."""
-    issue_days = [days[0] - timedelta(days=k) for k in (3, 2, 1)] + days
-    texts, absent, failed = load_days("rsga", [d for d in issue_days if d >= FIRST_DAY], progress)
+    texts, absent, failed = load_days("rsga", _rsga_days(days), progress, pre)
     out = {}
     for t in texts.values():
         for _, target, lead, pm, px in parse_rsga(t):
@@ -677,7 +713,14 @@ def run(start: date, end: date, floor_cls: str = "C1.0", panels: Iterable[str] =
     floor = class_flux(floor_cls.upper())
     if lead not in (1, 2, 3) or verify_cls not in ("M", "X"):
         raise ValueError("lead must be 1–3 and class M or X")
-    cat = catalogue(start, end, progress)
+    days = day_range(start, end)
+    jobs = {"events": _event_days(days)}
+    if "verify" in panels:
+        jobs["rsga"] = _rsga_days(days)
+    if "regions" in panels:
+        jobs["srs"] = _srs_days(days)
+    pre = prefetch(jobs, progress)
+    cat = catalogue(start, end, progress, pre=pre)
     out = {"start": cat.days[0].isoformat(), "end": cat.days[-1].isoformat(),
            "n_events": len(cat.events), "coverage_note": cat.note(),
            "floor": floor_cls.upper(), "rescale": rescale, "panels": {}}
@@ -704,7 +747,7 @@ def run(start: date, end: date, floor_cls: str = "C1.0", panels: Iterable[str] =
         out["panels"]["dist"] = guard(lambda: distribution(cat, floor, rescale))
     if "verify" in panels:
         def _verify():
-            probs, note = forecasts(cat.days, progress)
+            probs, note = forecasts(cat.days, progress, pre)
             v = verification(cat, probs, lead, verify_cls)
             if note:
                 v["note"] += " " + note + "."
@@ -712,7 +755,7 @@ def run(start: date, end: date, floor_cls: str = "C1.0", panels: Iterable[str] =
         out["panels"]["verify"] = guard(_verify)
     if "regions" in panels:
         def _regions():
-            texts, _, failed = load_days("srs", [d - timedelta(days=1) for d in cat.days], progress)
+            texts, _, failed = load_days("srs", _srs_days(cat.days), progress, pre)
             r = regions(cat, texts)
             if failed:
                 r["note_srs"] = f"{len(failed)} region summary day(s) the archive did not serve"

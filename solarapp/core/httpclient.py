@@ -43,6 +43,25 @@ def session() -> requests.Session:
         return _session
 
 
+_wide: dict[int, requests.Session] = {}
+
+
+def wide_session(size: int) -> requests.Session:
+    """A session pooled for `size` concurrent sockets to one host, for bulk
+    archive reads; past the pool size every request pays a fresh TLS handshake."""
+    with _session_lock:
+        s = _wide.get(size)
+        if s is None:
+            s = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=4, pool_maxsize=size, max_retries=0,
+            )
+            s.mount("https://", adapter)
+            s.mount("http://", adapter)
+            _wide[size] = s
+        return s
+
+
 def get_json_cached(url: str, timeout: int = 30, ttl: float = FEED_TTL) -> Any:
     """GET a JSON feed, reusing a recent response.
 

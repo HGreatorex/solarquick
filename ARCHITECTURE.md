@@ -309,7 +309,7 @@ It is a view over NOAA SWPC's open feeds, not a DataSource: no window, no parser
 
 ## STATS (UI and backend)
 
-UI: header `STATS` button (`#stats` hash, `body[data-mode="stats"]`), module `STATS` in `index.html`; `LIVE.setMode` owns the three-way mode switch so LIVE alert polling continues. Lead/Class selectors re-run only `verify`. Backend:
+UI: header `STATS` button (`#stats` hash, `body[data-mode="stats"]`), module `STATS` in `index.html`; `LIVE.setMode` owns the three-way mode switch so LIVE alert polling continues. Lead/Class selectors re-run only `verify`; a new run aborts the previous request. Downloads: `stats.prefetch` reads events, RSGA and SRS days through one pool (`WORKERS` = 32, `httpclient.wide_session`, connect timeout 3 s, 3 tries): ≈20 s for a year from cold; 48 workers made NGDC refuse files. Backend:
 
 `core/stats.py`, served by `POST /api/stats/stream` and `POST /api/stats/epoch/stream`
 (NDJSON: `progress` events per archive file / flare, then `result`; each panel can

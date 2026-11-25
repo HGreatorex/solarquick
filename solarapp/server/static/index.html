@@ -423,7 +423,7 @@
         <label class="fld">Class <select id="st-vcls"><option>M</option><option>X</option></select></label></div>
       <div class="row"><button type="button" id="st-run" class="sbtn">RUN</button></div>
       <div id="st-prog"></div>
-      <div class="side-hint">First load of a year downloads NOAA's daily archives (≈25 s each, then cached). Lead and Class re-run only S4.</div>
+      <div class="side-hint">Last 365 d / Last 5 y run straight away. A new run cancels one in progress. First load of a year downloads ≈1,100 NOAA archive files (≈15–30 s), then it is cached. Lead and Class re-run only S4.</div>
     </div>
   </details>
   <details>
@@ -1970,10 +1970,10 @@ const STATS = (() => {
   }
 
   // -- streaming ------------------------------------------------------------
-  async function ndjson(url, body, onProgress) {
+  async function ndjson(url, body, onProgress, signal) {
     let r;
-    try { r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
-    catch (e) { throw new Error(NO_SERVER); }
+    try { r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body), signal}); }
+    catch (e) { if (e.name === "AbortError") throw e; throw new Error(NO_SERVER); }
     if (r.status === 404 || r.status === 405) throw new Error(OLD_SERVER);
     if (!r.ok) throw new Error(await errText(r));
     let result = null;
@@ -2003,7 +2003,6 @@ const STATS = (() => {
 
   function busy(on, what) {
     S.busy = on;
-    ["st-run", "ep-run"].forEach(i => { $(i).disabled = on; });
     clearInterval(S.tick);
     if (!on) { $("st-prog").textContent = ""; return; }
     const t0 = Date.now(); S.last = "";
@@ -2200,20 +2199,30 @@ const STATS = (() => {
     rS1(p.rates); rS2(p.dist); rS4(p.verify); rS5(p.regions);
   }
 
+  // a new run replaces whatever is running: the old request is cancelled and its
+  // result, if it still arrives, is dropped (the server keeps caching what it fetched)
+  function begin(kind, label) {
+    if (S.ctl) S.ctl.abort();
+    S.ctl = new AbortController(); S.kind = kind;
+    msg(""); busy(true, label);
+    return S.ctl;
+  }
+  function end(ctl) { if (ctl === S.ctl) { S.ctl = null; S.kind = null; busy(false); } }
+
   async function run(panels, verifyOnly) {
-    if (S.busy) return;
     const i = inputs();
     if (!i.start || !i.end) { msg("Pick a start and end date."); return; }
     if (i.end < i.start) { msg("End is before start."); return; }
-    msg(""); busy(true, verifyOnly ? "S4" : "RUN");
+    const ctl = begin(verifyOnly ? "verify" : "full", verifyOnly ? "S4" : "RUN");
     const body = Object.assign({}, i, {panels, lead: +$("st-lead").value, verify_class: $("st-vcls").value});
     try {
-      const res = await ndjson("/api/stats/stream", body, prog);
+      const res = await ndjson("/api/stats/stream", body, prog, ctl.signal);
+      if (ctl !== S.ctl) return;
       if (verifyOnly && S.result) S.result.panels.verify = res.panels.verify;
       else { S.result = res; S.key = keyOf(i); }
       renderAll();
-    } catch (e) { msg("STATS: " + (e.message || e)); }
-    finally { busy(false); }
+    } catch (e) { if (ctl === S.ctl && e.name !== "AbortError") msg("STATS: " + (e.message || e)); }
+    finally { end(ctl); }
   }
 
   function runAll() {
@@ -2223,11 +2232,11 @@ const STATS = (() => {
   }
 
   function rerunVerify() {
+    if (S.kind === "full") return runAll();            // the run under way used the old setting
     if (S.result && S.key === keyOf(inputs()) && S.result.panels.verify !== undefined) run(["verify"], true);
   }
 
   async function runEpoch() {
-    if (S.busy) return;
     const i = inputs();
     if (!i.start || !i.end || i.end < i.start) { msg("Pick a valid period."); return; }
     const num = id => $(id).value === "" ? null : +$(id).value;
@@ -2235,10 +2244,13 @@ const STATS = (() => {
       class_max: $("ep-max").value.trim() || null, region: num("ep-reg"),
       before_min: num("ep-b") || 60, after_min: num("ep-a") || 120, channel: $("ep-ch").value, align: $("ep-al").value,
       limit: Math.min(200, Math.max(1, num("ep-lim") || 50)), exclude_overlaps: $("ep-ov").checked};
-    msg(""); busy(true, "EPOCH");
-    try { S.epoch = await ndjson("/api/stats/epoch/stream", body, prog); rS3(); $("st-s3").scrollIntoView(); }
-    catch (e) { msg("EPOCH: " + (e.message || e)); }
-    finally { busy(false); }
+    const ctl = begin("epoch", "EPOCH");
+    try {
+      const res = await ndjson("/api/stats/epoch/stream", body, prog, ctl.signal);
+      if (ctl !== S.ctl) return;
+      S.epoch = res; rS3(); $("st-s3").scrollIntoView();
+    } catch (e) { if (ctl === S.ctl && e.name !== "AbortError") msg("EPOCH: " + (e.message || e)); }
+    finally { end(ctl); }
   }
 
   function setRange(n) {
@@ -2250,8 +2262,8 @@ const STATS = (() => {
   function init() {
     $("mode-stats").addEventListener("click", () => { LIVE.setMode("stats"); probe(); });
     setRange(365);
-    $("st-1y").addEventListener("click", safe(() => setRange(365)));
-    $("st-5y").addEventListener("click", safe(() => setRange(1826)));
+    $("st-1y").addEventListener("click", safe(() => { setRange(365); runAll(); }));
+    $("st-5y").addEventListener("click", safe(() => { setRange(1826); runAll(); }));
     $("st-run").addEventListener("click", safe(runAll));
     $("ep-run").addEventListener("click", safe(runEpoch));
     $("st-lead").addEventListener("change", safe(rerunVerify));

@@ -92,7 +92,7 @@ Opus to review S2/S4 maths before merge.
 ### Phase 2 status (2026-11-25)
 Backend done (`core/stats.py`, tests/test_stats.py). Data source changed from HEK to SWPC
 daily archives (Edited Events / RSGA / SRS via NCEI) — faster, has satellites and regions.
-**Remaining: the UI** (Sonnet). API contract:
+**UI done 2026-11-25** (index.html, `STATS` module; frac-of-region-days with Wilson CI is plotted in S5 because the backend CI belongs to `frac`, not `rate`). API contract:
 
 `POST /api/stats/stream` `{start, end: "YYYY-MM-DD", floor: "C1.0", panels: [rates, dist,
 verify, regions], rescale: false, lead: 1, verify_class: "M"}` → NDJSON

@@ -267,6 +267,28 @@
                  font-family:"VT323", monospace; font-size:26px; color:#ffffff; background:#ff0000;
                  display:flex; gap:1rem; align-items:center; }
   .lv-alertbar.noaa { background:#ff00ff; }
+
+  /* ---- STATS mode ------------------------------------------------------ */
+  body[data-mode="stats"] #regside, body[data-mode="stats"] #regmain { display:none; }
+  body:not([data-mode="stats"]) #statsside, body:not([data-mode="stats"]) #statsmain { display:none; }
+  .tt-modes #mode-stats.active { background:#00ffff; color:#000000; border-color:#00ffff; }
+  #statsside input[type=date], #statsside input[type=number], #statsside input[type=text] { width:100%; }
+  #statsside .two { display:grid; grid-template-columns:1fr 1fr; gap:.4rem; }
+  #st-prog { font-family:"VT323", monospace; font-size:22px; color:#ffff00; min-height:1.2em; margin-top:.3rem; }
+  #st-msg { color:#ffff00; margin:.3rem 0; }
+  .st-banner { background:#ffff00; color:#000000; padding:.3rem .7rem; margin:.3rem 0; font-size:.85rem; }
+  .st-note { color:#00ffff; font-size:.8rem; margin:.3rem 0 .8rem; }
+  .st-line { font-size:.9rem; margin:.4rem 0; }
+  .st-line b { color:#ffff00; }
+  .st-ok { color:#00ff00; } .st-bad { color:#ff0000; }
+  .st-row { display:flex; gap:1rem; flex-wrap:wrap; }
+  .st-row > div { flex:1; min-width:320px; }
+  .st-tog { display:flex; gap:.4rem; margin:.4rem 0; }
+  .st-tog button { background:#0000ff; color:#ffff00; border:none; padding:.1rem .8rem; font-size:20px; }
+  .st-tog button.active { background:#ffff00; color:#000000; }
+  .st-more { margin:.3rem 0; }
+  .st-skip { font-size:.78rem; color:#00ffff; max-height:9rem; overflow-y:auto; }
+  .st-sc td:nth-child(odd) { color:#00ffff; } .st-sc td { padding:.25rem .7rem; }
 </style>
 </head>
 <body data-mode="regular">
@@ -279,6 +301,7 @@
 <div class="tt-modes">
     <button type="button" id="mode-regular" class="active">REGULAR</button>
     <button type="button" id="mode-live">● LIVE</button>
+    <button type="button" id="mode-stats">STATS</button>
   </div>
 </header>
 <div class="app">
@@ -372,6 +395,65 @@
       Real-time data are operational, not science-quality.</div></div>
   </details>
 </aside>
+<aside id="statsside">
+  <details open>
+    <summary>Period (UT days)</summary>
+    <div class="pane">
+      <label class="fld">Start <input type="date" id="st-t0"></label>
+      <label class="fld">End <input type="date" id="st-t1"></label>
+      <div class="row"><button type="button" class="sbtn" id="st-1y">Last 365 d</button>
+        <button type="button" class="sbtn" id="st-5y">Last 5 y</button></div>
+      <label class="fld">Flares from <select id="st-floor"><option value="B1.0">B1</option>
+        <option value="C1.0" selected>C1</option><option value="M1.0">M1</option></select></label>
+      <label class="chk"><input type="checkbox" id="st-rescale"> Rescale GOES ≤15 (÷0.7)</label>
+      <div class="side-hint">GOES-15 and earlier fluxes carry NOAA's 0.7 scaling. Tick to put every era on the GOES-16+ scale.</div>
+    </div>
+  </details>
+  <details open>
+    <summary>Panels</summary>
+    <div class="pane">
+      <label class="chk"><input type="checkbox" class="st-pn" value="rates" checked> S1 Rates</label>
+      <label class="chk"><input type="checkbox" class="st-pn" value="dist" checked> S2 Size distribution</label>
+      <label class="chk"><input type="checkbox" class="st-pn" value="verify" checked> S4 Forecast verification</label>
+      <label class="chk"><input type="checkbox" class="st-pn" value="regions" checked> S5 Regions</label>
+      <div class="row"><label class="fld">Lead <select id="st-lead"><option value="1">day 1</option>
+        <option value="2">day 2</option><option value="3">day 3</option></select></label>
+        <label class="fld">Class <select id="st-vcls"><option>M</option><option>X</option></select></label></div>
+      <div class="row"><button type="button" id="st-run" class="sbtn">RUN</button></div>
+      <div id="st-prog"></div>
+      <div class="side-hint">First load of a year downloads NOAA's daily archives (≈25 s each, then cached). Lead and Class re-run only S4.</div>
+    </div>
+  </details>
+  <details>
+    <summary>S3 Superposed epoch</summary>
+    <div class="pane">
+      <div class="two">
+        <label class="fld">Min class <input type="text" id="ep-min" value="M1.0"></label>
+        <label class="fld">Max class <input type="text" id="ep-max" placeholder="none"></label>
+        <label class="fld">Region <input type="number" id="ep-reg" placeholder="any"></label>
+        <label class="fld">Max flares <input type="number" id="ep-lim" value="50" min="1" max="200"></label>
+        <label class="fld">Before (min) <input type="number" id="ep-b" value="60" min="5"></label>
+        <label class="fld">After (min) <input type="number" id="ep-a" value="120" min="5"></label>
+      </div>
+      <label class="fld">Channel <select id="ep-ch"><option value="xrsb">GOES XRS 1–8 Å</option>
+        <option value="xrsa">GOES XRS 0.5–4 Å</option><option value="lya">GOES EUVS Lyman-α</option></select></label>
+      <label class="fld">t = 0 at <select id="ep-al"><option value="curve">curve maximum</option>
+        <option value="catalogue">catalogued peak</option></select></label>
+      <label class="chk"><input type="checkbox" id="ep-ov" checked> Drop overlapping flares</label>
+      <div class="row"><button type="button" id="ep-run" class="sbtn">RUN EPOCH</button></div>
+      <div class="side-hint">Uses the period above. Needs sunpy; the largest flares are taken first if over the cap.</div>
+    </div>
+  </details>
+</aside>
+<main id="statsmain">
+  <div id="st-msg"></div>
+  <div id="st-banner"></div>
+  <section id="st-s1"></section>
+  <section id="st-s2"></section>
+  <section id="st-s3"></section>
+  <section id="st-s4"></section>
+  <section id="st-s5"></section>
+</main>
 <main id="livemain">
   <div id="lv-bar"></div>
   <div class="ptabs" id="lv-tabs">
@@ -1555,9 +1637,8 @@ const LIVE = (() => {
   // -- mode, polling ------------------------------------------------------
   function setMode(m) {
     document.body.dataset.mode = m;
-    $("mode-live").classList.toggle("active", m === "live");
-    $("mode-regular").classList.toggle("active", m !== "live");
-    history.replaceState(null, "", m === "live" ? "#live" : location.pathname + location.search);
+    ["regular", "live", "stats"].forEach(k => $("mode-" + k).classList.toggle("active", k === m));
+    history.replaceState(null, "", m === "live" ? "#live" : m === "stats" ? "#stats" : location.pathname + location.search);
     if (m === "live") { showPage(S.page); }
     poll(true);
   }
@@ -1836,7 +1917,7 @@ const LIVE = (() => {
     $("lv-test").addEventListener("click", () => fireAlert("TEST", "Alerts are working.", "flare"));
     notifHint(); schedule(); setInterval(status, 1000);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(false); });
-    if (location.hash === "#live") setMode("live"); else poll(false);
+    if (location.hash === "#live") setMode("live"); else if (location.hash === "#stats") setMode("stats"); else poll(false);
   }
 
   function notifHint() {
@@ -1846,10 +1927,316 @@ const LIVE = (() => {
     else el.textContent = "";
   }
 
+  return {init, setMode, goRegular};
+})();
+
+// -- STATS mode ---------------------------------------------------------------
+const STATS = (() => {
+  const esc = escapeHtml;
+  const S = {result: null, key: "", epoch: null, mode: "raw", busy: false};
+  const fx = (v, d = 2) => v === null || v === undefined || !isFinite(v) ? "–" : (+v).toFixed(d);
+  const CLS = {B: "#ffffff", C: "#00ffff", M: "#ffff00", X: "#ff0000"};
+  const ax = o => Object.assign({gridcolor: "#0000ff", zerolinecolor: "#0000ff", linecolor: "#ffffff"}, o);
+  const lay = o => Object.assign({}, DARK, {margin: {l: 62, r: 20, t: 10, b: 48}, height: 300,
+                                            legend: {orientation: "h", y: -0.28}}, o || {});
+  const plot = (id, tr, lo) => { const el = $(id); if (el) Plotly.newPlot(el, tr, lay(lo), {responsive: true, displayModeBar: false}); };
+  const head = t => `<div class="lv-h">${esc(t)}</div>`;
+  const note = t => t ? `<div class="st-note">${esc(t)}</div>` : "";
+  const bad = b => `<div class="lv-err">unavailable: ${esc(b.error)}</div>`;
+  const median = a => { const s = a.filter(v => v !== null && isFinite(v)).sort((x, y) => x - y);
+                        return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
+  const dayStr = d => d.toISOString().slice(0, 10);
+  const msg = t => { $("st-msg").textContent = t || ""; };
+
+  // -- streaming ------------------------------------------------------------
+  async function ndjson(url, body, onProgress) {
+    const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    if (!r.ok) {
+      let d = r.status;
+      try { const j = await r.json(); d = j.detail !== undefined ? j.detail : j; } catch (e) {}
+      throw new Error(Array.isArray(d) ? d.map(x => x.msg || JSON.stringify(x)).join("; ") : typeof d === "string" ? d : JSON.stringify(d));
+    }
+    let result = null;
+    const handle = line => {
+      if (!line.trim()) return;
+      const ev = JSON.parse(line);
+      if (ev.event === "progress") onProgress(ev);
+      else if (ev.event === "error") throw new Error(ev.error);
+      else if (ev.event === "result") result = ev;
+    };
+    if (!r.body || !r.body.getReader) (await r.text()).split("\n").forEach(handle);
+    else {
+      const reader = r.body.getReader(), dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const {value, done} = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, {stream: true});
+        const lines = buf.split("\n"); buf = lines.pop();
+        lines.forEach(handle);
+      }
+      handle(buf);
+    }
+    if (!result) throw new Error("the server ended the stream without a result");
+    return result;
+  }
+
+  function busy(on) {
+    S.busy = on;
+    ["st-run", "ep-run"].forEach(i => { $(i).disabled = on; });
+    if (!on) $("st-prog").textContent = "";
+  }
+  const prog = ev => { $("st-prog").textContent = `${ev.what} ${ev.done}/${ev.total}`; };
+
+  const inputs = () => ({start: $("st-t0").value, end: $("st-t1").value, floor: $("st-floor").value,
+                         rescale: $("st-rescale").checked});
+  const keyOf = i => [i.start, i.end, i.floor, i.rescale].join("|");
+
+  // -- S1 rates ---------------------------------------------------------------
+  function rS1(p) {
+    const el = $("st-s1");
+    if (!p) { el.innerHTML = ""; return; }
+    if (p.error) { el.innerHTML = head("S1 FLARE RATES") + bad(p); return; }
+    el.innerHTML = head("S1 FLARE RATES PER MONTH") + `<div id="st-p1"></div>` + note(p.note);
+    const x = p.months.map(m => m + "-01"), op = p.coverage.map(c => c < 1 ? 0.35 : 1);
+    const tr = Object.keys(p.counts).map(k => ({type: "bar", name: k, x, y: p.counts[k],
+      marker: {color: CLS[k], opacity: op}, hovertemplate: `%{x|%b %Y}: %{y} ${k}-class<extra></extra>`}));
+    if ((p.ssn || []).some(v => v !== null))
+      tr.push({type: "scatter", mode: "lines", name: "sunspot number", x, y: p.ssn, yaxis: "y2",
+               line: {color: "#ff00ff", width: 2}, connectgaps: false});
+    plot("st-p1", tr, {barmode: "stack", bargap: 0.1, margin: {l: 62, r: 62, t: 10, b: 48},
+                       xaxis: ax({type: "date"}), yaxis: ax({title: "flares per month"}),
+                       yaxis2: ax({title: "sunspot number", overlaying: "y", side: "right", showgrid: false})});
+  }
+
+  // -- S2 size distribution ---------------------------------------------------
+  function rS2(p) {
+    const el = $("st-s2");
+    if (!p) { el.innerHTML = ""; return; }
+    if (p.error) { el.innerHTML = head("S2 FLARE SIZE DISTRIBUTION") + bad(p); return; }
+    const sd = p.alpha_boot_sd !== null && p.alpha_boot_sd !== undefined ? p.alpha_boot_sd : p.sigma;
+    const gof = p.gof_p === null || p.gof_p === undefined ? "" :
+      (p.gof_p >= 0.1 ? `<span class="st-ok">power law not rejected</span>` : `<span class="st-bad">power law rejected</span>`);
+    el.innerHTML = head("S2 FLARE SIZE DISTRIBUTION") +
+      `<div class="st-line">α = <b>${fx(p.alpha)} ± ${fx(sd)}</b> above <b>${esc(p.xmin_class || "")}</b>` +
+      ` (x_min = ${p.xmin ? (+p.xmin).toExponential(2) : "–"} W m⁻²) · ${p.n_tail} of ${p.n} flares` +
+      ` · KS D = ${fx(p.ks, 3)} · GOF p = ${fx(p.gof_p, 2)} ${gof}</div>` +
+      `<div class="st-row"><div id="st-p2a"></div><div id="st-p2b"></div></div>` + note(p.note);
+    const h = p.hist, xc = [], yc = [], tx = [];
+    h.density.forEach((d, i) => { if (d > 0) { xc.push(Math.sqrt(h.edges[i] * h.edges[i + 1])); yc.push(d); tx.push(h.counts[i]); } });
+    const vl = {type: "line", xref: "x", x0: p.xmin, x1: p.xmin, yref: "paper", y0: 0, y1: 1, line: {color: "#ff00ff", dash: "dot", width: 1}};
+    const xa = t => ax({type: "log", title: t});
+    plot("st-p2a", [
+      {type: "scatter", mode: "markers", name: "data", x: xc, y: yc, text: tx, marker: {color: "#00ffff", size: 7},
+       hovertemplate: "%{x:.2e} W m⁻²<br>%{text} flares<extra></extra>"},
+      {type: "scatter", mode: "lines", name: "power law", x: p.model.x, y: p.model.density, line: {color: "#ffff00", width: 2}}],
+      {xaxis: xa("peak flux (W m⁻²)"), yaxis: ax({type: "log", title: "density"}), shapes: [vl]});
+    plot("st-p2b", [
+      {type: "scatter", mode: "markers", name: "data", x: p.ccdf.x, y: p.ccdf.p, marker: {color: "#00ffff", size: 4}},
+      {type: "scatter", mode: "lines", name: "power law", x: p.model.x, y: p.model.ccdf, line: {color: "#ffff00", width: 2}}],
+      {xaxis: xa("peak flux (W m⁻²)"), yaxis: ax({type: "log", title: "P(flux ≥ x)"}), shapes: [vl]});
+  }
+
+  // -- S3 superposed epoch -------------------------------------------------------
+  function curveFor(f, mode) {
+    if (mode === "raw") return f.curve;
+    const B = mode === "bgsub" ? (f.background || 0) : 0, den = f.flux_peak - B;
+    return den > 0 ? f.curve.map(v => v === null ? null : (v - B) / den) : f.curve.map(() => null);
+  }
+
+  function rS3() {
+    const el = $("st-s3"), e = S.epoch;
+    if (!e) { el.innerHTML = ""; return; }
+    const sk = e.skipped || [];
+    el.innerHTML = head("S3 SUPERPOSED EPOCH") +
+      `<div class="st-line"><b>${esc(e.label || "")}</b> · ${e.used} flares used of ${e.matched} matched` +
+      (e.overlaps_dropped ? ` · ${e.overlaps_dropped} dropped as overlapping` : "") +
+      (e.largest_first ? ` · over the cap: largest first` : "") + `</div>` +
+      (e.coverage_note ? `<div class="st-banner">${esc(e.coverage_note)}</div>` : "") +
+      `<div class="st-tog" id="st-modes">${[["raw", "RAW"], ["norm", "PEAK-NORMALISED"], ["bgsub", "BACKGROUND-SUBTRACTED"]]
+        .map(([k, l]) => `<button type="button" data-m="${k}" class="${S.mode === k ? "active" : ""}">${l}</button>`).join("")}</div>` +
+      `<div id="st-p3"></div>` +
+      `<div class="st-row"><div id="st-d0"></div><div id="st-d1"></div><div id="st-d2"></div></div>` +
+      note(e.note) +
+      (sk.length ? `<details><summary>${sk.length} flare${sk.length > 1 ? "s" : ""} skipped</summary><div class="st-skip">` +
+        sk.map(s => typeof s === "string" ? esc(s) : esc(`${(s.peak || "").slice(0, 16).replace("T", " ")} ${s.class || ""} — ${s.why || ""}`)).join("<br>") +
+        `</div></details>` : "");
+    el.querySelectorAll("#st-modes button").forEach(b => b.addEventListener("click", () => { S.mode = b.dataset.m; plotEpoch(); 
+      el.querySelectorAll("#st-modes button").forEach(x => x.classList.toggle("active", x === b)); }));
+    plotEpoch();
+    [["rise_min", "Rise time (min)"], ["decay_efold_min", "Decay e-folding time (min)"], ["duration_min", "Duration (min)"]].forEach(([k, t], i) => {
+      const v = (e.derived || {})[k] || [], m = median(v);
+      plot("st-d" + i, [{type: "histogram", x: v, nbinsx: 20, marker: {color: "#00ff00"}, name: t}],
+        {height: 220, margin: {l: 45, r: 10, t: 28, b: 40}, showlegend: false, xaxis: ax({title: t}), yaxis: ax({title: "flares"}),
+         title: {text: `${t.split(" (")[0]}: median ${fx(m, 1)} (n=${v.length})`, font: {size: 12, color: "#ffff00"}, x: 0.02, xanchor: "left"}});
+    });
+  }
+
+  function plotEpoch() {
+    const e = S.epoch, m = S.mode, st = e.stats[m], x = e.minutes;
+    let xs = [], ys = [];
+    e.flares.forEach(f => { xs = xs.concat(x, [null]); ys = ys.concat(curveFor(f, m), [null]); });
+    const nmed = st.n ? Math.max(...st.n) : 0;
+    const tr = [
+      {type: "scatter", mode: "lines", x: xs, y: ys, name: "individual", line: {color: "#ffffff", width: 1}, opacity: 0.15, hoverinfo: "skip", connectgaps: false},
+      {type: "scatter", mode: "lines", x, y: st.q75, line: {width: 0, color: "#00ffff"}, hoverinfo: "skip", showlegend: false},
+      {type: "scatter", mode: "lines", x, y: st.q25, name: "IQR", fill: "tonexty", fillcolor: "rgba(0,255,255,0.28)", line: {width: 0, color: "#00ffff"}, hoverinfo: "skip"},
+      {type: "scatter", mode: "lines", x, y: st.median, name: `median (n ≤ ${nmed})`, line: {color: "#ffff00", width: 3}}];
+    const ylab = m === "raw" ? (e.label || "flux") + " (W m⁻²)" : m === "norm" ? "flux / peak" : "(flux − B) / (peak − B)";
+    plot("st-p3", tr, {height: 340, xaxis: ax({title: "minutes from peak"}),
+      yaxis: ax(Object.assign({title: ylab}, m === "raw" ? {type: "log"} : {})),
+      shapes: [{type: "line", xref: "x", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: {color: "#ff00ff", dash: "dot", width: 1}}]});
+  }
+
+  // -- S4 verification -------------------------------------------------------------
+  function rS4(p) {
+    const el = $("st-s4");
+    if (!p) { el.innerHTML = ""; return; }
+    if (p.error) { el.innerHTML = head("S4 FORECAST VERIFICATION") + bad(p); return; }
+    const pr = p.persistence || {};
+    const rows = [["Brier score", fx(p.brier, 3)], ["Brier (climatology)", fx(p.brier_clim, 3)], ["Brier skill score", fx(p.bss, 3)],
+      ["Reliability", fx(p.reliability, 3)], ["Resolution", fx(p.resolution, 3)], ["Uncertainty", fx(p.uncertainty, 3)],
+      ["AUC", fx(p.auc, 3)], ["TSS max", `${fx(p.tss_max, 3)} at p ≥ ${fx(p.tss_threshold, 2)}`],
+      ["Persistence Brier", fx(pr.brier, 3)], ["Persistence POD / POFD", `${fx(pr.pod, 2)} / ${fx(pr.pofd, 2)}`]];
+    let tb = "";
+    for (let i = 0; i < rows.length; i += 2)
+      tb += `<tr><td>${rows[i][0]}</td><td>${rows[i][1]}</td><td>${rows[i + 1][0]}</td><td>${rows[i + 1][1]}</td></tr>`;
+    el.innerHTML = head(`S4 NOAA DAY-${p.lead} ${p.class}-CLASS FORECAST VERIFICATION`) +
+      `<div class="st-line"><b>${p.n}</b> forecast days, <b>${p.events}</b> with a ≥${esc(p.class)}1.0 flare · base rate <b>${fx(p.base_rate * 100, 1)} %</b></div>` +
+      `<div class="st-row"><div id="st-p4a"></div><div id="st-p4b"></div></div>` +
+      `<table class="lv-table st-sc"><tbody>${tb}</tbody></table>` + note(p.note);
+    const b = (p.bins || []).filter(x => x.n > 0 && x.freq !== null && x.ci);
+    plot("st-p4a", [
+      {type: "scatter", mode: "lines", x: [0, 1], y: [0, 1], name: "perfect", line: {color: "#ffffff", dash: "dot", width: 1}, hoverinfo: "skip"},
+      {type: "scatter", mode: "lines", x: [0, 1], y: [p.base_rate, p.base_rate], name: "base rate", line: {color: "#ffff00", dash: "dash", width: 1}, hoverinfo: "skip"},
+      {type: "scatter", mode: "markers+text", name: "forecast bins", x: b.map(x => x.mean_p), y: b.map(x => x.freq),
+       text: b.map(x => "n=" + x.n), textposition: "bottom right", textfont: {size: 10, color: "#00ffff"},
+       marker: {color: "#00ffff", size: 9},
+       error_y: {type: "data", symmetric: false, array: b.map(x => x.ci[1] - x.freq), arrayminus: b.map(x => x.freq - x.ci[0]), color: "#00ffff", thickness: 1.5}}],
+      {height: 340, title: {text: "Reliability", font: {size: 13, color: "#ffff00"}, x: 0.02, xanchor: "left"}, margin: {l: 62, r: 20, t: 30, b: 48},
+       xaxis: ax({title: "forecast probability", range: [0, 1]}), yaxis: ax({title: "observed frequency", range: [0, 1]})});
+    const roc = (p.roc || []).slice().sort((u, v) => u.pofd - v.pofd);
+    const best = roc.find(r => r.threshold === p.tss_threshold);
+    const tr = [
+      {type: "scatter", mode: "lines", x: [0, 1], y: [0, 1], name: "no skill", line: {color: "#ffffff", dash: "dot", width: 1}, hoverinfo: "skip"},
+      {type: "scatter", mode: "lines", name: `NOAA (AUC ${fx(p.auc, 2)})`, x: roc.map(r => r.pofd), y: roc.map(r => r.pod), line: {color: "#00ffff", width: 2},
+       text: roc.map(r => "p ≥ " + fx(r.threshold, 2)), hovertemplate: "%{text}<br>POFD %{x:.2f}, POD %{y:.2f}<extra></extra>"}];
+    if (best) tr.push({type: "scatter", mode: "markers", name: "max TSS", x: [best.pofd], y: [best.pod], marker: {color: "#ffff00", size: 11, symbol: "star"}});
+    if (pr.pod !== undefined && pr.pod !== null) tr.push({type: "scatter", mode: "markers", name: "persistence", x: [pr.pofd], y: [pr.pod], marker: {color: "#ff00ff", size: 10, symbol: "diamond"}});
+    plot("st-p4b", tr, {height: 340, title: {text: "ROC", font: {size: 13, color: "#ffff00"}, x: 0.02, xanchor: "left"}, margin: {l: 62, r: 20, t: 30, b: 48},
+      xaxis: ax({title: "false alarm rate (POFD)", range: [0, 1]}), yaxis: ax({title: "hit rate (POD)", range: [0, 1]})});
+  }
+
+  // -- S5 regions ---------------------------------------------------------------------
+  function rS5(p) {
+    const el = $("st-s5");
+    if (!p) { el.innerHTML = ""; return; }
+    if (p.error) { el.innerHTML = head("S5 REGION PRODUCTIVITY") + bad(p); return; }
+    const t = p.table || [], rt = p.rates || {};
+    const n3 = r => `${r.n.C}/${r.n.M}/${r.n.X}`;
+    const tbl = t.length ? `<table class="lv-table lv-click"><thead><tr><th>AR</th><th>FI</th><th>C/M/X</th><th>Largest</th><th>Max area</th><th>McIntosh</th><th>δ</th><th>Mag</th><th>Days</th></tr></thead><tbody>` +
+      t.map(r => `<tr data-q="${esc(r.query || "")}"><td>${esc(r.region)}</td><td>${esc(r.fi)}</td><td>${n3(r)}</td><td>${esc(r.largest || "")}</td><td>${r.max_area === null || r.max_area === undefined ? "–" : esc(r.max_area)}</td>` +
+        `<td>${esc(r.mcintosh_at_max || "")}</td><td>${r.delta ? "δ" : ""}</td><td>${esc(r.mag_max || "")}</td><td>${r.days_on_disk === undefined ? "" : esc(r.days_on_disk)}</td></tr>`).join("") +
+      `</tbody></table>` : `<div class="lv-err">no regions with flares in this period</div>`;
+    const mc = (rt.mcintosh || []).slice().sort((a, b) => b.region_days - a.region_days).slice(0, 30);
+    const pc = g => g ? fx(g.frac * 100, 1) + " %" : "–";
+    el.innerHTML = head("S5 REGION PRODUCTIVITY") +
+      `<div class="st-line">${p.n_regions} regions with flares${p.unassigned ? ` · ${p.unassigned} flares with no region` : ""}. Flare index FI = Σ (C=1, M=10, X=100 × magnitude). Click a row to open the region.</div>` + tbl +
+      `<div class="lv-h">Chance of a flare per region-day</div>` +
+      (mc.length || (rt.zurich || []).length ? `<div class="st-row"><div id="st-p5a"></div><div id="st-p5b"></div></div>` : `<div class="lv-err">no region-day rates (Solar Region Summaries missing)</div>`) +
+      note(rt.note) +
+      (mc.length ? `<div class="lv-h">McIntosh class (first three letters)</div><table class="lv-table"><thead><tr><th>Class</th><th>Region-days</th><th>C</th><th>M</th><th>X</th></tr></thead><tbody>` +
+        mc.map(g => `<tr><td>${esc(g.group)}</td><td>${g.region_days}</td><td>${pc(g.C)}</td><td>${pc(g.M)}</td><td>${pc(g.X)}</td></tr>`).join("") + `</tbody></table>` : "");
+    el.querySelectorAll("tr[data-q]").forEach(tr => tr.addEventListener("click", () => LIVE.goRegular(tr.dataset.q)));
+    const bars = (id, rows, title) => {
+      rows = (rows || []).filter(g => g.region_days > 0);
+      if (!rows.length) { if ($(id)) $(id).innerHTML = ""; return; }
+      const tr = ["M", "X"].map(k => {
+        const g = rows.filter(r => r[k] && r[k].frac > 0 && r[k].ci);
+        return {type: "scatter", mode: "markers", name: k + "-class", x: g.map(r => r.group), y: g.map(r => r[k].frac),
+          marker: {color: CLS[k], size: 9}, text: g.map(r => `${r.region_days} region-days · rate ${fx(r[k].rate, 3)} per region-day`),
+          hovertemplate: "%{x}: %{y:.3f}<br>%{text}<extra>" + k + "</extra>",
+          error_y: {type: "data", symmetric: false, array: g.map(r => r[k].ci[1] - r[k].frac), arrayminus: g.map(r => r[k].frac - r[k].ci[0]), color: CLS[k], thickness: 1.5}};
+      });
+      plot(id, tr, {height: 300, title: {text: title, font: {size: 13, color: "#ffff00"}, x: 0.02, xanchor: "left"}, margin: {l: 62, r: 20, t: 30, b: 48},
+        xaxis: ax({type: "category", title: title}), yaxis: ax({type: "log", title: "fraction of region-days with ≥1 flare"})});
+    };
+    bars("st-p5a", rt.zurich, "Zurich class");
+    bars("st-p5b", rt.mag, "Magnetic class");
+  }
+
+  // -- orchestration --------------------------------------------------------------
+  function renderAll() {
+    const r = S.result;
+    if (!r) return;
+    $("st-banner").innerHTML = [r.coverage_note, r.era_note].filter(Boolean).map(t => `<div class="st-banner">${esc(t)}</div>`).join("") +
+      `<div class="st-line"><b>${r.n_events}</b> flares ≥ ${esc(r.floor)}, ${esc(r.start)} → ${esc(r.end)}${r.rescale ? " (GOES ≤15 rescaled)" : ""}</div>`;
+    const p = r.panels || {};
+    rS1(p.rates); rS2(p.dist); rS4(p.verify); rS5(p.regions);
+  }
+
+  async function run(panels, verifyOnly) {
+    if (S.busy) return;
+    const i = inputs();
+    if (!i.start || !i.end) { msg("Pick a start and end date."); return; }
+    if (i.end < i.start) { msg("End is before start."); return; }
+    msg(""); busy(true);
+    const body = Object.assign({}, i, {panels, lead: +$("st-lead").value, verify_class: $("st-vcls").value});
+    try {
+      const res = await ndjson("/api/stats/stream", body, prog);
+      if (verifyOnly && S.result) S.result.panels.verify = res.panels.verify;
+      else { S.result = res; S.key = keyOf(i); }
+      renderAll();
+    } catch (e) { msg("STATS: " + (e.message || e)); }
+    finally { busy(false); }
+  }
+
+  function runAll() {
+    const panels = [...document.querySelectorAll(".st-pn:checked")].map(c => c.value);
+    if (!panels.length) { msg("Tick at least one panel."); return; }
+    run(panels, false);
+  }
+
+  function rerunVerify() {
+    if (S.result && S.key === keyOf(inputs()) && S.result.panels.verify !== undefined) run(["verify"], true);
+  }
+
+  async function runEpoch() {
+    if (S.busy) return;
+    const i = inputs();
+    if (!i.start || !i.end || i.end < i.start) { msg("Pick a valid period."); return; }
+    const num = id => $(id).value === "" ? null : +$(id).value;
+    const body = {start: i.start, end: i.end, class_min: $("ep-min").value.trim() || "M1.0",
+      class_max: $("ep-max").value.trim() || null, region: num("ep-reg"),
+      before_min: num("ep-b") || 60, after_min: num("ep-a") || 120, channel: $("ep-ch").value, align: $("ep-al").value,
+      limit: Math.min(200, Math.max(1, num("ep-lim") || 50)), exclude_overlaps: $("ep-ov").checked};
+    msg(""); busy(true);
+    try { S.epoch = await ndjson("/api/stats/epoch/stream", body, prog); rS3(); $("st-s3").scrollIntoView(); }
+    catch (e) { msg("EPOCH: " + (e.message || e)); }
+    finally { busy(false); }
+  }
+
+  function setRange(n) {
+    const end = new Date(Date.now() - 86400000);
+    $("st-t1").value = dayStr(end);
+    $("st-t0").value = dayStr(new Date(end.getTime() - (n - 1) * 86400000));
+  }
+
+  function init() {
+    $("mode-stats").addEventListener("click", () => LIVE.setMode("stats"));
+    setRange(365);
+    $("st-1y").addEventListener("click", () => setRange(365));
+    $("st-5y").addEventListener("click", () => setRange(1826));
+    $("st-run").addEventListener("click", runAll);
+    $("ep-run").addEventListener("click", runEpoch);
+    $("st-lead").addEventListener("change", rerunVerify);
+    $("st-vcls").addEventListener("change", rerunVerify);
+  }
   return {init};
 })();
 
 init();
+STATS.init();
 LIVE.init();
 </script>
 </body>

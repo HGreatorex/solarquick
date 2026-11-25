@@ -32,6 +32,7 @@ that; the rules do it on your machine.
 - [While it's fetching](#while-its-fetching)
 - [Optional: smarter query understanding](#optional-smarter-query-understanding)
 - [LIVE mode](#live-mode)
+- [STATS mode](#stats-mode)
 - [Exporting data](#exporting-data)
 - [What this is and isn't](#what-this-is-and-isnt)
 - [Troubleshooting](#troubleshooting)
@@ -372,6 +373,15 @@ a banner, the tab title, a desktop notification and an optional beep. They only
 work while the SolarQuick page is open (a background tab is fine).
 
 ---
+
+## STATS mode
+
+The **STATS** button (or `/#stats`) opens a statistics page: pick a period (up to 11 years),
+a flare floor and the panels, then **RUN**. S1 monthly flare rates with sunspot number,
+S2 flare-size distribution with a power-law fit, S4 NOAA M/X forecast verification
+(reliability, ROC, Brier skill), S5 region productivity. **S3 superposed epoch** (needs
+sunpy) stacks GOES curves around chosen flares. Data come from NOAA's daily archives;
+the first load of a year takes a few minutes, then it is cached on disk.
 
 ## Exporting data
 

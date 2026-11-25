@@ -307,7 +307,9 @@ It is a view over NOAA SWPC's open feeds, not a DataSource: no window, no parser
 - Caveats: the page must stay open for alerts; detection latency is the poll interval
   plus SWPC's own ~1 min.
 
-## STATS (backend)
+## STATS (UI and backend)
+
+UI: header `STATS` button (`#stats` hash, `body[data-mode="stats"]`), module `STATS` in `index.html`; `LIVE.setMode` owns the three-way mode switch so LIVE alert polling continues. Lead/Class selectors re-run only `verify`. Backend:
 
 `core/stats.py`, served by `POST /api/stats/stream` and `POST /api/stats/epoch/stream`
 (NDJSON: `progress` events per archive file / flare, then `result`; each panel can

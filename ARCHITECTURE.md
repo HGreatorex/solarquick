@@ -40,6 +40,7 @@ solarapp/
 │   │   ├── pipeline.py      ← one query as a stream of progress events
 │   │   ├── workspace.py     ← the form's request: default view, frames, flare crop
 │   │   ├── summary.py       ← the overview a bare date composes
+│   │   ├── live.py          ← LIVE mode: SWPC feeds → page blocks for /api/live
 │   │   ├── timings.py       ← learned per-source durations (~/.cache/solarapp)
 │   │   ├── helioviewer.py   ← shared Helioviewer image pipeline (channel tables)
 │   │   ├── tsutil.py        ← df→series, clip, downsample, energy-band select
@@ -64,7 +65,7 @@ solarapp/
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
 │       └── static/index.html← two-pane UI: form (left) + image grid & plots (right)
-└── tests/                   ← 474, all offline
+└── tests/                   ← 485, all offline
 ```
 
 ## The two-pane UI
@@ -275,6 +276,35 @@ ordinary multi-source request.
   parallel segments), `lines` (terminator), `points` (subsolar), optional
   `track` — day/night world map on Plotly's built-in geo (scattergeo,
   natural earth projection; topojson comes from the Plotly CDN).
+
+## LIVE mode
+
+Header button `LIVE` swaps the two panes for live ones (`#live` in the URL keeps a
+reload there); `REGULAR` swaps back without touching the regular form or results.
+It is a view over NOAA SWPC's open feeds, not a DataSource: no window, no parser.
+
+- `core/live.py` → `GET /api/live?panels=now,regions,flares,geo`. Each page is a dict
+  of independent blocks; a dead feed returns `{"error": ...}` for that block only.
+  `httpclient.get_json_cached` is the single network door (TTLs in `FEEDS`);
+  tests patch it. The browser polls (30 s / 60 s / 5 min), always for `now` plus the
+  visible page, and pauses in a hidden tab unless alerts are on.
+- P100 NOW: R/S/G scales + 3-day forecast, 6 h GOES XRS (reuses `plotTimeseries`),
+  flare-in-progress banner (latest event with no end time), last-24 h alert products.
+  P101 REGIONS: NOAA per-region C/M/X flare probabilities, disk map over a Helioviewer
+  AIA 171 screenshot (reuses `plotRegionDisk`). P102 FLARES: 7-day list; AR and
+  site from HEK (C+ only, 5 min cache, 60 s back-off on failure) via the existing
+  `flare_sites_from_regions`. P103 GEO: Kp, L1 solar wind (RTSW), ≥10/≥100 MeV protons.
+- **Region positions come from the SRS text, not `solar_regions.json`**: on 2026-11-25
+  the JSON had AR 4579 at W76 against W62 valid at 24/2400Z in the SRS — the JSON
+  leads by about a day. SRS positions are rotated to now (`synodic_rate`); regions the
+  SRS lacks use the JSON string and are flagged `approx`.
+- Alerts (client-side, `LIVE` in index.html): long-channel flux ≥ threshold and rising
+  over 3 min, one per event, re-armed below 0.5× threshold or after 30 min; plus each
+  new NOAA ALERT/WARNING/WATCH product (the first poll only learns the existing ones).
+  Delivery: banner, tab title, Notification API, optional beep. SWPC operational flux,
+  so classes match SWPC's, not the NCEI science archive's.
+- Caveats: the page must stay open for alerts; detection latency is the poll interval
+  plus SWPC's own ~1 min.
 
 ## Caveats (read before extending)
 
@@ -502,7 +532,7 @@ ordinary multi-source request.
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (474, all offline — external APIs are never
+template. Tests: `pytest tests/` (485, all offline — external APIs are never
 called from the suite, and a test that quietly starts doing so shows up as a
 suite that takes twenty seconds instead of one).
 

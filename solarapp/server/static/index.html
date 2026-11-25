@@ -218,17 +218,71 @@
   .prog-head { font-family:"VT323", monospace; font-size:22px; color:#ffff00; }
   .dl button { font-family:"IBM Plex Mono", monospace; color:#00ffff; border:2px solid #00ffff; }
   .dl button:hover:not(:disabled) { color:#ffff00; border-color:#ffff00; }
+
+  /* ---- LIVE mode ------------------------------------------------------- */
+  [hidden] { display:none !important; }
+  .tt-modes { display:flex; gap:.5rem; padding:0 0 .7rem; }
+  .tt-modes button { font-family:"VT323", monospace; font-size:22px; padding:.1rem 1rem;
+                     background:#000000; color:#ffffff; border:2px solid #ffffff; }
+  .tt-modes button.active { background:#00ff00; color:#000000; border-color:#00ff00; }
+  .tt-modes #mode-live.active { background:#ff0000; color:#ffffff; border-color:#ff0000; }
+  body[data-mode="live"] #regside, body[data-mode="live"] #regmain { display:none; }
+  body:not([data-mode="live"]) #liveside, body:not([data-mode="live"]) #livemain { display:none; }
+  #lv-bar { display:flex; gap:.8rem; align-items:center; flex-wrap:wrap; min-height:30px;
+            font-family:"VT323", monospace; font-size:24px; margin-bottom:.6rem; }
+  .lv-chip { color:#000000; padding:0 .5rem; }
+  .lv-flash, .lv-banner { animation:lvflash 1s steps(1) infinite; }
+  @keyframes lvflash { 50% { opacity:.35; } }
+  .ptabs { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.8rem; }
+  .ptabs button { font-family:"VT323", monospace; font-size:22px; padding:.1rem .9rem;
+                  background:#0000ff; color:#ffff00; border:none; }
+  .ptabs button.active { background:#ffff00; color:#000000; }
+  .lv-h { font-family:"VT323", monospace; font-size:24px; font-weight:400; line-height:1;
+          background:#0000ff; color:#ffff00; padding:.3rem .6rem; margin:1rem 0 .5rem; }
+  .lv-banner { background:#ff0000; color:#ffffff; font-family:"VT323", monospace; font-size:28px;
+               padding:.4rem .8rem; margin-bottom:.4rem; }
+  .lv-last { color:#00ffff; font-size:.85rem; margin:.4rem 0; }
+  .lv-last b { color:#ffffff; }
+  .lv-last select { padding:.15rem .3rem; font-size:.85rem; flex:none; }
+  .lv-err { color:#ffff00; font-size:.85rem; padding:.4rem 0; }
+  .lv-bad { color:#ff0000; }
+  .lv-tiles { display:flex; gap:.6rem; flex-wrap:wrap; margin:.4rem 0 .6rem; }
+  .lv-tile { border:2px solid; padding:.4rem .8rem; display:flex; gap:.8rem; align-items:center;
+             font-size:.85rem; min-width:15rem; }
+  .lv-tile small { color:#00ffff; }
+  .lv-big { font-family:"VT323", monospace; font-size:44px; line-height:1; }
+  .lv-table { width:100%; border-collapse:collapse; font-size:.88rem; margin:.4rem 0; }
+  .lv-table th { font-family:"VT323", monospace; font-size:20px; font-weight:400; color:#ffffff;
+                 text-align:left; padding:.3rem .6rem; border-bottom:2px solid #0000ff; }
+  .lv-table td { padding:.3rem .6rem; border-bottom:2px solid #0000ff; }
+  .lv-click tbody tr { cursor:pointer; }
+  .lv-click tbody tr:hover { outline:1px solid #00ffff; }
+  #lv-alerts details { border-bottom:2px solid #0000ff; padding:.25rem 0; }
+  #lv-alerts summary { cursor:pointer; font-size:.85rem; }
+  #lv-alerts pre { white-space:pre-wrap; color:#00ffff; font-size:.78rem; margin:.4rem 0 .4rem 1rem; }
+  .lv-fl { display:flex; gap:1rem; align-items:flex-start; }
+  #lv-fdisk { width:300px; height:300px; flex:none; }
+  .lv-fl table { flex:1; }
+  .lv-alertbar { position:fixed; top:0; left:0; right:0; z-index:100; padding:.5rem 1rem;
+                 font-family:"VT323", monospace; font-size:26px; color:#ffffff; background:#ff0000;
+                 display:flex; gap:1rem; align-items:center; }
+  .lv-alertbar.noaa { background:#ff00ff; }
 </style>
 </head>
-<body>
+<body data-mode="regular">
+<div id="lv-alertbar" hidden></div>
 <header class="tt-head">
   <div class="tt-row"><span>P100</span><span class="c">SOLARQUICK</span><span>100</span>
     <span class="y" id="clock"></span></div>
   <div class="tt-band"><h1 id="logo" aria-label="SolarQuick">SolarQuick</h1>
     <span class="tag">SOLAR DATA QUICKLOOK</span></div>
+<div class="tt-modes">
+    <button type="button" id="mode-regular" class="active">REGULAR</button>
+    <button type="button" id="mode-live">● LIVE</button>
+  </div>
 </header>
 <div class="app">
-<aside>
+<aside id="regside">
   <form id="f">
     <input id="q" placeholder="e.g. biggest flare since 2014" autocomplete="off">
     <button id="go">Go</button>
@@ -279,11 +333,59 @@
 
   <div class="presets" id="presets"><div class="lbl">Quick select</div></div>
 </aside>
-<main>
+<main id="regmain">
   <div id="msg"></div>
   <div id="prog"></div>
   <div id="plot"></div>
   <div id="meta"></div>
+</main>
+
+<aside id="liveside">
+  <details open>
+    <summary>Refresh</summary>
+    <div class="pane">
+      <label class="fld">Every <select id="lv-int"><option value="30">30 s</option>
+        <option value="60">60 s</option><option value="300">5 min</option></select></label>
+      <div class="row"><button type="button" class="sbtn" id="lv-now">REFRESH NOW</button></div>
+      <div class="side-hint" id="lv-status">–</div>
+    </div>
+  </details>
+  <details open>
+    <summary>Flare alerts</summary>
+    <div class="pane">
+      <label class="chk"><input type="checkbox" id="lv-alert"> Alert me</label>
+      <label class="fld">Min <select id="lv-thr"><option value="5e-6">C5</option>
+        <option value="1e-5">M1</option><option value="5e-5">M5</option>
+        <option value="1e-4">X1</option></select></label>
+      <label class="chk"><input type="checkbox" id="lv-beep"> Beep</label>
+      <div class="row"><button type="button" class="sbtn" id="lv-test">Test alert</button></div>
+      <div class="side-hint">Fires when the GOES 1–8 Å flux passes the minimum and is rising,
+        and for each new NOAA alert, warning or watch. Works while this page stays open
+        (a background tab is fine) and keeps going after you switch back to REGULAR.</div>
+      <div class="side-hint lv-bad" id="lv-notif"></div>
+    </div>
+  </details>
+  <details open>
+    <summary>Sources</summary>
+    <div class="pane"><div class="side-hint">NOAA SWPC open data (services.swpc.noaa.gov),
+      GOES primary, Solar Region Summary, HEK flare list (positions), Helioviewer (AIA 171).
+      Real-time data are operational, not science-quality.</div></div>
+  </details>
+</aside>
+<main id="livemain">
+  <div id="lv-bar"></div>
+  <div class="ptabs" id="lv-tabs">
+    <button type="button" data-p="now" class="active">P100 NOW</button>
+    <button type="button" data-p="regions">P101 REGIONS</button>
+    <button type="button" data-p="flares">P102 FLARES</button>
+    <button type="button" data-p="geo">P103 GEO</button>
+  </div>
+  <div id="lv-pages">
+    <section id="lp-now"></section>
+    <section id="lp-regions" hidden></section>
+    <section id="lp-flares" hidden></section>
+    <section id="lp-geo" hidden></section>
+  </div>
 </main>
 </div>
 <script>
@@ -1428,7 +1530,327 @@ function renderImageGrid(items, stats, allItems) {
   show(0);
   if (movie && timeline.length > 1) start();
 }
+// -- LIVE mode ------------------------------------------------------------
+// A second view over the same page: the header button swaps the two panes for
+// the live ones and back, leaving the regular view's form and results exactly
+// as they were. The browser polls /api/live (one page of blocks at a time,
+// plus "now" for the banner and alerts); each block can fail alone.
+// Alerts keep polling "now" after you switch back to the regular view.
+
+const LIVE = (() => {
+  const S = {page: "now", data: {}, sig: {}, lastOk: 0, inflight: false, err: null,
+             interval: 60, alerts: false, thr: 1e-5, beep: false, flareMin: "B",
+             armed: true, firedAt: 0, seen: null, open: new Set(), timer: null};
+  try { Object.assign(S, JSON.parse(localStorage.getItem("sq-live") || "{}")); } catch (e) {}
+  const save = () => { try { localStorage.setItem("sq-live", JSON.stringify(
+    {interval: S.interval, alerts: S.alerts, thr: S.thr, beep: S.beep, flareMin: S.flareMin})); } catch (e) {} };
+  const isLive = () => document.body.dataset.mode === "live";
+  const hhmm = iso => (iso || "").slice(11, 16);
+  const hhmmss = d => `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  const esc = escapeHtml;
+  const SCALE_COLOUR = s => s === null || s === undefined ? "#ffffff" : +s === 0 ? "#00ff00" : +s <= 2 ? "#ffff00" : +s === 3 ? "#ff00ff" : "#ff0000";
+  const errBlock = b => `<div class="lv-err">unavailable: ${esc(b.error)}</div>`;
+  const ok = b => b && !b.error;
+
+  // -- mode, polling ------------------------------------------------------
+  function setMode(m) {
+    document.body.dataset.mode = m;
+    $("mode-live").classList.toggle("active", m === "live");
+    $("mode-regular").classList.toggle("active", m !== "live");
+    history.replaceState(null, "", m === "live" ? "#live" : location.pathname + location.search);
+    if (m === "live") { showPage(S.page); }
+    poll(true);
+  }
+
+  async function poll(force) {
+    if (S.inflight || (!isLive() && !S.alerts)) return;
+    if (document.hidden && !S.alerts && !force) return;   // alerts need the background tab polling
+    const panels = isLive() ? [...new Set(["now", S.page])] : ["now"];
+    S.inflight = true; status();
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 90000);
+    try {
+      const r = await fetch("/api/live?panels=" + panels.join(","), {signal: ctl.signal, cache: "no-store"});
+      const j = await r.json();
+      if (!r.ok) throw new Error((j.errors || [r.status]).join("; "));
+      Object.assign(S.data, j.panels); S.lastOk = Date.now(); S.err = null;
+      if (S.data.now) checkAlerts(S.data.now);
+      if (isLive()) renderAll();
+    } catch (e) {
+      S.err = e.name === "AbortError" ? "timed out" : String(e.message || e);
+    } finally { clearTimeout(to); S.inflight = false; status(); }
+  }
+
+  function schedule() {
+    clearInterval(S.timer);
+    S.timer = setInterval(() => poll(false), S.interval * 1000);
+  }
+
+  function status() {
+    const age = S.lastOk ? Math.round((Date.now() - S.lastOk) / 1000) : null;
+    const stale = age === null || age > 3 * S.interval;
+    const when = S.lastOk ? hhmmss(new Date(S.lastOk)) + " UT" : "never";
+    $("lv-status").innerHTML =
+      `updated ${when}${age !== null ? ` (${age} s ago)` : ""}` +
+      (S.inflight ? ` <span class="spin">⟳</span>` : "") +
+      (S.err ? `<br><span class="lv-bad">last attempt failed: ${esc(S.err)}</span>` : "") +
+      (stale && S.lastOk ? `<br><span class="lv-bad">STALE</span>` : "");
+    const bar = $("lv-bar");
+    if (bar.dataset.stale !== String(stale)) { bar.dataset.stale = String(stale); renderBar(); }
+  }
+
+  // -- the strip under the header: scales, class, flare ----------------------
+  function renderBar() {
+    const n = S.data.now || {}, bits = [];
+    if (ok(n.scales) && n.scales["0"]) {
+      ["R", "S", "G"].forEach(k => {
+        const s = n.scales["0"][k].scale;
+        bits.push(`<span class="lv-chip" style="background:${SCALE_COLOUR(s)}">${k}${s ?? "?"}</span>`);
+      });
+    }
+    if (ok(n.xray)) bits.push(`<span class="y">XRS ${esc(n.xray.latest.class || "?")}</span>`);
+    const ev = ok(n.flare_latest) && n.flare_latest.event;
+    if (ev && ev.in_progress) bits.push(`<span class="lv-chip lv-flash" style="background:#ff0000">FLARE ${esc(ev.max_class || "")}</span>`);
+    if ($("lv-bar").dataset.stale === "true" && S.lastOk) bits.push(`<span class="lv-chip" style="background:#ffff00">STALE</span>`);
+    $("lv-bar").innerHTML = bits.join(" ") || `<span class="c">waiting for NOAA…</span>`;
+  }
+
+  // -- pages ------------------------------------------------------------
+  function showPage(p) {
+    S.page = p;
+    document.querySelectorAll("#lv-tabs button").forEach(b => b.classList.toggle("active", b.dataset.p === p));
+    document.querySelectorAll("#lv-pages > section").forEach(s => s.hidden = s.id !== "lp-" + p);
+    if (S.data[p]) renderAll(); else { $("lp-" + p).innerHTML = `<div class="lv-err"><span class="spin">⟳</span> loading…</div>`; poll(true); }
+  }
+
+  const RENDER = {now: renderNow, regions: renderRegions, flares: renderFlares, geo: renderGeo};
+  function renderAll() {
+    renderBar();
+    const p = S.page, d = S.data[p];
+    if (!d) return;
+    const sig = JSON.stringify(d) + (p === "flares" ? S.flareMin : "");
+    if (S.sig[p] === sig) return;                 // nothing new: leave zoom and open alerts alone
+    S.sig[p] = sig;
+    RENDER[p]($("lp-" + p), d);
+  }
+
+  function heading(t) { return `<h2 class="lv-h">${esc(t)}</h2>`; }
+  function mk(el, html) { el.innerHTML = html; return el; }
+  function box(el, height) { const d = document.createElement("div"); d.style.height = height + "px"; el.appendChild(d); return d; }
+
+  // P100 -----------------------------------------------------------------
+  function renderNow(el, d) {
+    let h = "";
+    const ev = ok(d.flare_latest) && d.flare_latest.event;
+    if (ev && ev.in_progress)
+      h += `<div class="lv-banner">FLARE IN PROGRESS — ${esc(ev.max_class)} peak ${hhmm(ev.max)} UT, now ${esc(ev.current_class)}, began ${hhmm(ev.begin)} UT</div>`;
+    else if (ev)
+      h += `<div class="lv-last">Last flare: <b>${esc(ev.max_class)}</b> peak ${hhmm(ev.max)} UT (${esc(ev.begin_class)} → ${esc(ev.end_class || "?")}, ended ${hhmm(ev.end)} UT)</div>`;
+    h += heading("NOAA space-weather scales");
+    if (ok(d.scales)) {
+      const now = d.scales["0"], max24 = d.scales["-1"];
+      h += `<div class="lv-tiles">` + [["R", "Radio blackouts"], ["S", "Radiation storms"], ["G", "Geomagnetic storms"]].map(([k, name]) =>
+        `<div class="lv-tile" style="border-color:${SCALE_COLOUR(now[k].scale)}"><span class="lv-big" style="color:${SCALE_COLOUR(now[k].scale)}">${k}${esc(now[k].scale ?? "?")}</span>` +
+        `<span>${name}<br><small>now: ${esc(now[k].text ?? "–")}` +
+        (max24 ? ` · 24 h max ${k}${esc(max24[k].scale ?? "?")}` : "") + `</small></span></div>`).join("") + `</div>`;
+      const rows = ["1", "2", "3"].filter(k => d.scales[k]).map(k => {
+        const s = d.scales[k];
+        return `<tr><td>${esc(s.date || "")}</td><td>${esc(s.R.minor ?? "–")}% / ${esc(s.R.major ?? "–")}%</td><td>${esc(s.S.prob ?? "–")}%</td><td style="color:${SCALE_COLOUR(s.G.scale)}">${s.G.scale ? "G" + esc(s.G.scale) : "–"}</td></tr>`;
+      }).join("");
+      h += `<table class="lv-table"><thead><tr><th>Forecast</th><th>R1–2 / R3+ chance</th><th>S1+ chance</th><th>G scale</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } else h += errBlock(d.scales);
+    h += heading("GOES X-ray flux, last 6 h");
+    mk(el, h + `<div id="lv-xray"></div><div id="lv-alerts"></div>`);
+    if (ok(d.xray)) {
+      const g = $("lv-xray"); g.style.height = "380px";
+      plotTimeseries(g, d.xray.spec, false, null);
+    } else $("lv-xray").innerHTML = errBlock(d.xray);
+    let a = heading("NOAA alerts, warnings and watches — last 24 h");
+    if (!ok(d.alerts)) a += errBlock(d.alerts);
+    else if (!d.alerts.alerts.length) a += `<div class="lv-last">None issued.</div>`;
+    else a += d.alerts.alerts.map(x => `<details data-id="${esc(x.id)}" ${S.open.has(x.id) ? "open" : ""}><summary><span class="c">${esc(x.product)}</span> ${hhmm(x.issued)} UT — ${esc(x.headline)}</summary><pre>${esc(x.message)}</pre></details>`).join("");
+    $("lv-alerts").innerHTML = a;
+    $("lv-alerts").querySelectorAll("details").forEach(dt => dt.addEventListener("toggle", () =>
+      dt.open ? S.open.add(dt.dataset.id) : S.open.delete(dt.dataset.id)));
+  }
+
+  // P101 -----------------------------------------------------------------
+  const PROB_COLOUR = p => p >= 50 ? "#ff0000" : p >= 10 ? "#ffff00" : "#ffffff";
+  function renderRegions(el, d) {
+    let h = heading("Active regions now");
+    if (ok(d.probs)) {
+      const p = d.probs, f3 = a => a.map(v => v ?? "–").join(" / ");
+      h += `<div class="lv-last">Whole-disk flare chance, day 1/2/3 (issued ${esc(p.date.slice(0, 10))}): ` +
+           `<b>C</b> ${f3(p.c)}% · <b>M</b> ${f3(p.m)}% · <b>X</b> ${f3(p.x)}% · ≥10 MeV protons ${f3(p.protons)}%</div>`;
+    } else h += errBlock(d.probs);
+    if (!ok(d.regions)) { mk(el, h + errBlock(d.regions)); return; }
+    const R = d.regions, rows = R.regions;
+    h += `<div class="lv-last">Region list observed ${esc(R.observed)}. Positions: ${esc(R.position_source || "SWPC region feed — may lead the true position by up to a day")}` +
+         `${rows.some(r => r.approx) && R.position_source ? "; regions missing from the summary use the feed's own position" : ""}.</div>`;
+    h += `<div id="lv-disk"></div>`;
+    const prob = r => ["x", "m", "c"].map(k => `<span style="color:${PROB_COLOUR(r.prob[k])}">${k.toUpperCase()} ${r.prob[k] ?? "–"}%</span>`).join(" ");
+    h += `<table class="lv-table lv-click"><thead><tr><th>Region</th><th>Location</th><th>Area</th><th>McIntosh</th><th>Spots</th><th>Mag type</th><th>Flare chance</th><th>Flares today C/M/X</th></tr></thead><tbody>` +
+      rows.map(r => `<tr data-q="${esc(r.query)}"><td class="y">AR ${esc(r.nmbr)}</td><td>${esc(r.location || "")}${r.behind ? " (limb)" : ""}</td><td>${r.area ?? ""}</td><td>${esc(r.mcintosh || "")}</td><td>${r.spots ?? ""}</td><td>${esc(r.mag || "")}</td><td>${prob(r)}</td><td>${r.events.c}/${r.events.m}/${r.events.x}</td></tr>`).join("") +
+      `</tbody></table><div class="evhint">Click a row for that region's week in the regular view. Flare chances are NOAA's, per region, for the next 24 h.</div>`;
+    mk(el, h);
+    const mapped = rows.filter(r => r.x !== null && r.x !== undefined);
+    if (mapped.length) {
+      const g = $("lv-disk"); g.style.height = "560px";
+      plotRegionDisk(g, {track: false}, mapped);
+      // the disk as it looks now, behind the regions (Helioviewer AIA 171)
+      Plotly.relayout(g, {images: [{source: R.disk_image.url, xref: "x", yref: "y", x: -R.disk_image.half, y: R.disk_image.half,
+        sizex: 2 * R.disk_image.half, sizey: 2 * R.disk_image.half, sizing: "stretch", layer: "below", opacity: 1}],
+        "shapes[0].fillcolor": "rgba(0,0,0,0)"});
+    } else $("lv-disk").innerHTML = `<div class="lv-last">No regions with a position on the disk.</div>`;
+    el.querySelectorAll("tr[data-q]").forEach(tr => tr.addEventListener("click", () => goRegular(tr.dataset.q)));
+  }
+
+  // P102 -----------------------------------------------------------------
+  const CLASS_ORDER = "ABCMX";
+  function renderFlares(el, d) {
+    if (!ok(d.flares)) { mk(el, heading("Flares, last 7 days") + errBlock(d.flares)); return; }
+    const all = d.flares.events, min = CLASS_ORDER.indexOf(S.flareMin);
+    const evs = all.filter(e => CLASS_ORDER.indexOf((e.class || "A")[0]) >= min);
+    let h = heading(`Flares, last 7 days — ${evs.length} of ${all.length} (GOES ≥ ${S.flareMin})`);
+    h += `<div class="lv-last">Show <select id="lv-fmin">${["A", "B", "C", "M", "X"].map(c => `<option ${c === S.flareMin ? "selected" : ""}>${c}</option>`).join("")}</select> and above · ` +
+         `positions and regions from HEK/SWPC for C-class and above` +
+         (d.flares.ar_error ? ` <span class="lv-bad">(unavailable now: ${esc(d.flares.ar_error)})</span>` : "") + `</div>`;
+    const placed = evs.filter(e => e.x !== null && e.x !== undefined);
+    h += `<div class="lv-fl">` + (placed.length ? `<div id="lv-fdisk"></div>` : "") +
+      `<table class="lv-table lv-click"><thead><tr><th>Class</th><th>Peak (UT)</th><th>Start → end</th><th>Region</th><th>Sat</th></tr></thead><tbody>` +
+      evs.map(e => `<tr data-q="${esc(e.query)}"><td class="y">${esc(e.class)}</td><td>${esc(utc(e.peak))}</td><td>${hhmm(e.start)} → ${e.end ? hhmm(e.end) : "ongoing"}</td><td>${e.ar ? "AR " + e.ar : ""}${e.position_from ? " ≈" : ""}</td><td>${e.satellite ?? ""}</td></tr>`).join("") +
+      `</tbody></table></div><div class="evhint">Click a row for that flare in the regular view.</div>`;
+    mk(el, h);
+    if (placed.length) { const g = $("lv-fdisk"); g.style.height = "300px"; plotFlareDisk(g, placed, goRegular); }
+    el.querySelectorAll("tr[data-q]").forEach(tr => tr.addEventListener("click", () => goRegular(tr.dataset.q)));
+    $("lv-fmin").addEventListener("change", ev => { S.flareMin = ev.target.value; save(); S.sig.flares = null; renderAll(); });
+  }
+
+  // P103 -----------------------------------------------------------------
+  function renderGeo(el, d) {
+    mk(el, heading("Geomagnetic activity (Kp), last 3 days") + `<div id="lv-kp"></div>` +
+           heading("Solar wind at L1, last 6 h") + `<div id="lv-sw"></div>` +
+           heading("Energetic protons (GOES)") + `<div id="lv-pr"></div>`);
+    const small = {margin: {t: 10, r: 40, b: 35, l: 60}, xaxis: {gridcolor: "#0000ff"}, ...DARK};
+    if (ok(d.kp)) {
+      const k = d.kp.kp, g = $("lv-kp"); g.style.height = "260px";
+      Plotly.newPlot(g, [{type: "bar", x: k.map(r => r.time), y: k.map(r => r.kp), width: 3 * 3600 * 1000 * 0.9,
+        marker: {color: k.map(r => r.kp >= 9 ? "#ff0000" : r.kp >= 7 ? "#ff00ff" : r.kp >= 5 ? "#ffff00" : "#00ff00")},
+        hovertemplate: "Kp %{y}<extra>%{x}</extra>"}],
+        {...small, yaxis: {range: [0, 9], title: "Kp", gridcolor: "#0000ff", dtick: 1},
+         shapes: [{type: "line", xref: "paper", x0: 0, x1: 1, y0: 5, y1: 5, line: {color: "#ff0000", dash: "dot", width: 1}}],
+         annotations: [{xref: "paper", x: 1, y: 5, text: "G1", showarrow: false, xanchor: "left", font: {color: "#ff0000", size: 11}}]},
+        {responsive: true, displayModeBar: false});
+    } else $("lv-kp").innerHTML = errBlock(d.kp);
+    if (ok(d.wind)) {
+      const w = d.wind, g = $("lv-sw"); g.style.height = "520px";
+      const tr = (src, name, color, ax) => ({x: src.times, y: src.values, name, mode: "lines", line: {color, width: 1.5}, xaxis: "x", yaxis: ax});
+      Plotly.newPlot(g, [tr(w.speed, "speed km/s", "#ffff00", "y"), tr(w.density, "density cm⁻³", "#00ffff", "y2"),
+                         tr(w.bz, "Bz (GSM) nT", "#ff00ff", "y3"), tr(w.bt, "Bt nT", "#ffffff", "y3")],
+        {...small, grid: {rows: 3, columns: 1, pattern: "independent", roworder: "top to bottom"}, showlegend: true,
+         legend: {orientation: "h", y: -0.08},
+         yaxis: {title: "km/s", gridcolor: "#0000ff"}, yaxis2: {title: "cm⁻³", gridcolor: "#0000ff"},
+         yaxis3: {title: "nT", gridcolor: "#0000ff", zeroline: true, zerolinecolor: "#ff0000"}},
+        {responsive: true, displayModeBar: false});
+    } else $("lv-sw").innerHTML = errBlock(d.wind);
+    if (ok(d.protons)) {
+      const g = $("lv-pr"); g.style.height = "300px";
+      const col = ["#ffff00", "#00ffff"];
+      Plotly.newPlot(g, d.protons.series.map((s, i) => ({x: s.times, y: s.values, name: s.name, mode: "lines", line: {color: col[i % 2], width: 1.5}})),
+        {...small, yaxis: {type: "log", title: "pfu", gridcolor: "#0000ff", exponentformat: "power", range: [-2, 4]},
+         shapes: [{type: "line", xref: "paper", x0: 0, x1: 1, y0: d.protons.s1_threshold, y1: d.protons.s1_threshold, yref: "y", line: {color: "#ff0000", dash: "dot", width: 1}}],
+         annotations: [{xref: "paper", x: 1, y: Math.log10(d.protons.s1_threshold), yref: "y", text: "S1", showarrow: false, xanchor: "left", font: {color: "#ff0000", size: 11}}],
+         legend: {orientation: "h", y: -0.2}}, {responsive: true, displayModeBar: false});
+    } else $("lv-pr").innerHTML = errBlock(d.protons);
+  }
+
+  function goRegular(query) { setMode("regular"); q.value = query; f.requestSubmit(); }
+
+  // -- alerts -----------------------------------------------------------
+  function beep() {
+    try {
+      const c = S.ctx || (S.ctx = new AudioContext()), o = c.createOscillator(), g = c.createGain();
+      o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.15;
+      o.start(); o.stop(c.currentTime + 0.35);
+    } catch (e) {}
+  }
+
+  function fireAlert(title, body, kind) {
+    const bar = $("lv-alertbar");
+    bar.hidden = false; bar.className = "lv-alertbar " + kind;
+    bar.innerHTML = `<b>${esc(title)}</b> ${esc(body)} <button type="button" class="sbtn" id="lv-dismiss">DISMISS</button>`;
+    $("lv-dismiss").onclick = () => { bar.hidden = true; document.title = "SolarQuick"; };
+    document.title = "⚠ " + title + " — SolarQuick";
+    if ("Notification" in window && Notification.permission === "granted")
+      try { new Notification(title, {body, tag: "solarquick-" + kind}); } catch (e) {}
+    if (S.beep) beep();
+  }
+
+  function checkAlerts(now) {
+    // NOAA's own products: the first poll only learns what already exists
+    const list = ok(now.alerts) ? now.alerts.alerts : null;
+    if (list) {
+      const ids = new Set(list.map(a => a.id));
+      if (S.seen === null) S.seen = ids;
+      else {
+        list.filter(a => !S.seen.has(a.id) && /^(EXTENDED WARNING|ALERT|WARNING|WATCH)/i.test(a.headline))
+            .forEach(a => { if (S.alerts) fireAlert("NOAA " + a.product, a.headline, "noaa"); });
+        ids.forEach(i => S.seen.add(i));
+      }
+    }
+    // our onset detector on the 1-min long-channel flux: over threshold and rising over 3 min
+    if (!S.alerts || !ok(now.xray)) return;
+    const t = now.xray.spec.series[1].times, v = now.xray.spec.series[1].values, n = v.length - 1;
+    if (n < 4 || Date.now() - Date.parse(t[n]) > 15 * 60000) return;   // a gap in the feed is not a flare
+    let j = n;
+    while (j > 0 && Date.parse(t[n]) - Date.parse(t[j]) < 180000) j--;
+    if (!S.armed && (v[n] < 0.5 * S.thr || Date.now() - S.firedAt > 30 * 60000)) S.armed = true;
+    if (S.armed && v[n] >= S.thr && v[n] > v[j]) {
+      S.armed = false; S.firedAt = Date.now();
+      fireAlert(`${now.xray.latest.class} flare in progress`,
+                `GOES 1–8 Å ${v[n].toExponential(2)} W m⁻² at ${hhmm(t[n])} UT, rising`, "flare");
+    }
+  }
+
+  // -- wiring ---------------------------------------------------------------
+  function init() {
+    $("mode-live").addEventListener("click", () => setMode("live"));
+    $("mode-regular").addEventListener("click", () => setMode("regular"));
+    document.querySelectorAll("#lv-tabs button").forEach(b => b.addEventListener("click", () => showPage(b.dataset.p)));
+    $("lv-now").addEventListener("click", () => poll(true));
+    $("lv-int").value = String(S.interval);
+    $("lv-int").addEventListener("change", e => { S.interval = +e.target.value; save(); schedule(); });
+    $("lv-thr").value = String(S.thr);
+    $("lv-thr").addEventListener("change", e => { S.thr = +e.target.value; S.armed = true; save(); });
+    $("lv-alert").checked = S.alerts;
+    $("lv-alert").addEventListener("change", e => {
+      S.alerts = e.target.checked; S.armed = true; save();
+      if (S.alerts && "Notification" in window && Notification.permission === "default")
+        Notification.requestPermission().then(notifHint);
+      notifHint(); poll(true);
+    });
+    $("lv-beep").checked = S.beep;
+    $("lv-beep").addEventListener("change", e => {
+      S.beep = e.target.checked; save();
+      if (S.beep) { try { S.ctx = S.ctx || new AudioContext(); } catch (err) {} beep(); }
+    });
+    $("lv-test").addEventListener("click", () => fireAlert("TEST", "Alerts are working.", "flare"));
+    notifHint(); schedule(); setInterval(status, 1000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(false); });
+    if (location.hash === "#live") setMode("live"); else poll(false);
+  }
+
+  function notifHint() {
+    const el = $("lv-notif");
+    if (!("Notification" in window)) el.textContent = "This browser has no desktop notifications: you get the banner and title only.";
+    else if (Notification.permission === "denied") el.textContent = "Desktop notifications are blocked for this site: you get the banner and title only.";
+    else el.textContent = "";
+  }
+
+  return {init};
+})();
+
 init();
+LIVE.init();
 </script>
 </body>
 </html>

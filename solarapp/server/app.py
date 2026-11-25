@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from datetime import datetime, timezone
 
-from solarapp.core import events, export, hek, pipeline, resultcache, timings
+from solarapp.core import events, export, hek, live, pipeline, resultcache, timings
 from solarapp.core.parser import parse
 from solarapp.core.registry import get_registry
 
@@ -176,6 +176,16 @@ def frame(body: FrameRequest) -> JSONResponse:
         return JSONResponse(src.frame_at(_utc(body.time), **body.extras))
     except (ValueError, KeyError) as e:
         return JSONResponse({"errors": [f"Bad frame request: {e}"]}, status_code=422)
+
+
+@app.get("/api/live")
+def live_view(panels: str = "now") -> JSONResponse:
+    """LIVE mode: current SWPC pages (now, regions, flares, geo), each block failing alone."""
+    try:
+        return JSONResponse(live.collect([p for p in panels.split(",") if p]),
+                            headers={"Cache-Control": "no-store"})
+    except ValueError as e:
+        return JSONResponse({"errors": [str(e)]}, status_code=422)
 
 
 @app.get("/api/timings")

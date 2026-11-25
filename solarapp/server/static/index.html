@@ -272,7 +272,9 @@
   body[data-mode="stats"] #regside, body[data-mode="stats"] #regmain { display:none; }
   body:not([data-mode="stats"]) #statsside, body:not([data-mode="stats"]) #statsmain { display:none; }
   .tt-modes #mode-stats.active { background:#00ffff; color:#000000; border-color:#00ffff; }
-  #statsside input[type=date], #statsside input[type=number], #statsside input[type=text] { width:100%; }
+  #statsside .pane label.fld input, #statsside .pane label.fld select { width:100%; min-width:0; box-sizing:border-box; }
+  #statsside button:disabled { opacity:.35; cursor:wait; }
+  #st-msg:not(:empty) { background:#ff0000; color:#ffffff; padding:.4rem .7rem; }
   #statsside .two { display:grid; grid-template-columns:1fr 1fr; gap:.4rem; }
   #st-prog { font-family:"VT323", monospace; font-size:22px; color:#ffff00; min-height:1.2em; margin-top:.3rem; }
   #st-msg { color:#ffff00; margin:.3rem 0; }
@@ -1947,15 +1949,33 @@ const STATS = (() => {
                         return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
   const dayStr = d => d.toISOString().slice(0, 10);
   const msg = t => { $("st-msg").textContent = t || ""; };
+  const NO_SERVER = "Can't reach the SolarQuick server. Is it still running in the terminal?";
+  const OLD_SERVER = "The running server predates the STATS page. Stop SolarQuick (Ctrl-C) and start it again.";
+  async function errText(r) {
+    let d = r.status;
+    try { const j = await r.json(); d = j.errors || j.detail || j; } catch (e) {}
+    return Array.isArray(d) ? d.map(x => x.msg || (typeof x === "string" ? x : JSON.stringify(x))).join("; ")
+                            : typeof d === "string" ? d : JSON.stringify(d);
+  }
+  // any slip in a click handler shows on the page instead of failing silently
+  const safe = fn => (...a) => { try { const r = fn(...a); if (r && r.catch) r.catch(e => msg("STATS: " + (e.message || e))); }
+                                 catch (e) { msg("STATS: " + (e.message || e)); } };
+  // a quick check on entering the page: an empty body must come back 422 from a current server
+  async function probe() {
+    try {
+      const r = await fetch("/api/stats/stream", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+      if (r.status === 404 || r.status === 405) msg(OLD_SERVER);
+      else if ($("st-msg").textContent === OLD_SERVER || $("st-msg").textContent === NO_SERVER) msg("");
+    } catch (e) { msg(NO_SERVER); }
+  }
 
   // -- streaming ------------------------------------------------------------
   async function ndjson(url, body, onProgress) {
-    const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-    if (!r.ok) {
-      let d = r.status;
-      try { const j = await r.json(); d = j.detail !== undefined ? j.detail : j; } catch (e) {}
-      throw new Error(Array.isArray(d) ? d.map(x => x.msg || JSON.stringify(x)).join("; ") : typeof d === "string" ? d : JSON.stringify(d));
-    }
+    let r;
+    try { r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); }
+    catch (e) { throw new Error(NO_SERVER); }
+    if (r.status === 404 || r.status === 405) throw new Error(OLD_SERVER);
+    if (!r.ok) throw new Error(await errText(r));
     let result = null;
     const handle = line => {
       if (!line.trim()) return;
@@ -1981,12 +2001,17 @@ const STATS = (() => {
     return result;
   }
 
-  function busy(on) {
+  function busy(on, what) {
     S.busy = on;
     ["st-run", "ep-run"].forEach(i => { $(i).disabled = on; });
-    if (!on) $("st-prog").textContent = "";
+    clearInterval(S.tick);
+    if (!on) { $("st-prog").textContent = ""; return; }
+    const t0 = Date.now(); S.last = "";
+    const show = () => { $("st-prog").innerHTML = `<span class="spin">⟳</span> ${what} ${Math.round((Date.now() - t0) / 1000)} s` +
+      (S.last ? ` · ${S.last}` : " · contacting NOAA archive"); };
+    show(); S.tick = setInterval(show, 1000);
   }
-  const prog = ev => { $("st-prog").textContent = `${ev.what} ${ev.done}/${ev.total}`; };
+  const prog = ev => { S.last = `${ev.what} ${ev.done}/${ev.total}`; };
 
   const inputs = () => ({start: $("st-t0").value, end: $("st-t1").value, floor: $("st-floor").value,
                          rescale: $("st-rescale").checked});
@@ -2180,7 +2205,7 @@ const STATS = (() => {
     const i = inputs();
     if (!i.start || !i.end) { msg("Pick a start and end date."); return; }
     if (i.end < i.start) { msg("End is before start."); return; }
-    msg(""); busy(true);
+    msg(""); busy(true, verifyOnly ? "S4" : "RUN");
     const body = Object.assign({}, i, {panels, lead: +$("st-lead").value, verify_class: $("st-vcls").value});
     try {
       const res = await ndjson("/api/stats/stream", body, prog);
@@ -2210,7 +2235,7 @@ const STATS = (() => {
       class_max: $("ep-max").value.trim() || null, region: num("ep-reg"),
       before_min: num("ep-b") || 60, after_min: num("ep-a") || 120, channel: $("ep-ch").value, align: $("ep-al").value,
       limit: Math.min(200, Math.max(1, num("ep-lim") || 50)), exclude_overlaps: $("ep-ov").checked};
-    msg(""); busy(true);
+    msg(""); busy(true, "EPOCH");
     try { S.epoch = await ndjson("/api/stats/epoch/stream", body, prog); rS3(); $("st-s3").scrollIntoView(); }
     catch (e) { msg("EPOCH: " + (e.message || e)); }
     finally { busy(false); }
@@ -2223,14 +2248,15 @@ const STATS = (() => {
   }
 
   function init() {
-    $("mode-stats").addEventListener("click", () => LIVE.setMode("stats"));
+    $("mode-stats").addEventListener("click", () => { LIVE.setMode("stats"); probe(); });
     setRange(365);
-    $("st-1y").addEventListener("click", () => setRange(365));
-    $("st-5y").addEventListener("click", () => setRange(1826));
-    $("st-run").addEventListener("click", runAll);
-    $("ep-run").addEventListener("click", runEpoch);
-    $("st-lead").addEventListener("change", rerunVerify);
-    $("st-vcls").addEventListener("change", rerunVerify);
+    $("st-1y").addEventListener("click", safe(() => setRange(365)));
+    $("st-5y").addEventListener("click", safe(() => setRange(1826)));
+    $("st-run").addEventListener("click", safe(runAll));
+    $("ep-run").addEventListener("click", safe(runEpoch));
+    $("st-lead").addEventListener("change", safe(rerunVerify));
+    $("st-vcls").addEventListener("change", safe(rerunVerify));
+    if (location.hash === "#stats") probe();
   }
   return {init};
 })();

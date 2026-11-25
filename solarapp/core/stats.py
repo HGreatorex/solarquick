@@ -134,7 +134,7 @@ def load_days(kind: str, days: list[date], progress: Progress | None = None
                 absent.append(d)
             else:
                 texts[d] = text
-            if progress and (done % 20 == 0 or done == len(days)):
+            if progress and (done == 1 or done % 5 == 0 or done == len(days)):
                 progress(kind, done, len(days))
     return texts, sorted(absent), sorted(failed)
 

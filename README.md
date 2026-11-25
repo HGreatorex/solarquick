@@ -31,6 +31,7 @@ that; the rules do it on your machine.
 - [What you can ask for](#what-you-can-ask-for)
 - [While it's fetching](#while-its-fetching)
 - [Optional: smarter query understanding](#optional-smarter-query-understanding)
+- [LIVE mode](#live-mode)
 - [Exporting data](#exporting-data)
 - [What this is and isn't](#what-this-is-and-isnt)
 - [Troubleshooting](#troubleshooting)
@@ -349,6 +350,26 @@ Notes:
 > This part is **not yet verified against the live API** — it is covered by
 > tests with the API stubbed, but had not been exercised with a real key at the
 > time of writing. Please report what happens if you try it.
+
+---
+
+## LIVE mode
+
+Click **● LIVE** in the header for the current space-weather picture from NOAA
+SWPC; **REGULAR** returns to your form and results untouched. Four pages:
+
+- **P100 NOW** — NOAA R/S/G scales and 3-day forecast, last 6 h of GOES X-rays,
+  a flare-in-progress banner, and the last 24 h of NOAA alerts.
+- **P101 REGIONS** — today's active regions with NOAA's C/M/X flare chances,
+  drawn on the current AIA 171 disk. Click a region for its week.
+- **P102 FLARES** — the last 7 days of flares. Click one to open it.
+- **P103 GEO** — Kp, solar wind at L1, and energetic protons.
+
+The page refreshes itself (30 s, 60 s or 5 min) and flags **STALE** if NOAA
+stops answering. **Flare alerts** (left panel) fire when the GOES 1–8 Å flux
+passes your chosen class and is rising, and for each new NOAA alert or warning:
+a banner, the tab title, a desktop notification and an optional beep. They only
+work while the SolarQuick page is open (a background tab is fine).
 
 ---
 

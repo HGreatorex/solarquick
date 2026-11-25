@@ -41,6 +41,7 @@ solarapp/
 │   │   ├── workspace.py     ← the form's request: default view, frames, flare crop
 │   │   ├── summary.py       ← the overview a bare date composes
 │   │   ├── live.py          ← LIVE mode: SWPC feeds → page blocks for /api/live
+│   │   ├── stats.py         ← STATS page: SWPC daily archives → flare statistics
 │   │   ├── timings.py       ← learned per-source durations (~/.cache/solarapp)
 │   │   ├── helioviewer.py   ← shared Helioviewer image pipeline (channel tables)
 │   │   ├── tsutil.py        ← df→series, clip, downsample, energy-band select
@@ -65,7 +66,7 @@ solarapp/
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
 │       └── static/index.html← two-pane UI: form (left) + image grid & plots (right)
-└── tests/                   ← 485, all offline
+└── tests/                   ← 497, all offline
 ```
 
 ## The two-pane UI
@@ -306,6 +307,37 @@ It is a view over NOAA SWPC's open feeds, not a DataSource: no window, no parser
 - Caveats: the page must stay open for alerts; detection latency is the poll interval
   plus SWPC's own ~1 min.
 
+## STATS (backend)
+
+`core/stats.py`, served by `POST /api/stats/stream` and `POST /api/stats/epoch/stream`
+(NDJSON: `progress` events per archive file / flare, then `result`; each panel can
+fail alone with `{"error"}`). Field-by-field contract: SPEC_LIVE_STATS.md, Phase 2.
+
+- **Data**: NCEI copies of SWPC daily products, one file per day, cached under
+  `~/.cache/solarapp/swpc_daily/<kind>/` — Edited Events (GOES XRA events with class,
+  satellite, region; from 1996-07-31), RSGA (section III M/X probabilities for three
+  target days the file names itself), Solar Region Summary. Files older than 4 days
+  are final; a 404 older than 30 days is remembered as a gap; an unreadable day is
+  reported, never counted as quiet. The last ≤6 days fall back to SWPC's realtime
+  7-day flare list (no regions) and solar_probabilities.json (`date` = issue date,
+  verified against RSGA). First load of a year ≈ 25 s per product; cached ≈ 1 s.
+- **Conventions**: an event belongs to its peak's UT day. Classes are as published;
+  `rescale` divides GOES ≤15 fluxes by 0.7 (GOES-R scale) and the result warns when a
+  window mixes eras unrescaled. Verification always uses published classes, and
+  "Class M" is verified against ≥ M1.0.
+- **S2** Clauset–Shalizi–Newman: classes dequantised ±0.05, x_min by KS minimisation
+  over a rank grid (tail ≥ 50), continuous MLE, 200 bootstrap resamples (x_min re-chosen),
+  semi-parametric GOF p (100 sims). 2025, ≥C1: α = 2.29 ± 0.06 above C3.2, p = 0.24.
+- **S4** Brier, BSS vs the window's base rate, Murphy decomposition over distinct
+  forecast values (exact identity), 10 % reliability bins with Wilson CIs, ROC/AUC,
+  max TSS, persistence baseline. 2025 day-1 M: BSS 0.08, AUC 0.68.
+- **S5** flare index 100ΣX+10ΣM+ΣC+0.1ΣB per region; per region-day rates by Zurich,
+  McIntosh (≥10 region-days) and magnetic class, the region taken from the SRS valid
+  at the start of that UT day. 2025 M-rate: A 0.004 … E 0.48; δ 0.88 per region-day.
+- **S3** curves via the registry (`goes_xrs`, `goes_euvs` Lyman-α), so they share the
+  plugins' archives and caches; largest N first; flares with another ≥ half-flux
+  catalogued flare inside the window are dropped by default.
+
 ## Caveats (read before extending)
 
 - **HEK flare positions are unreliable**: the SWPC list often reports
@@ -532,7 +564,7 @@ It is a view over NOAA SWPC's open feeds, not a DataSource: no window, no parser
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (485, all offline — external APIs are never
+template. Tests: `pytest tests/` (497, all offline — external APIs are never
 called from the suite, and a test that quietly starts doing so shows up as a
 suite that takes twenty seconds instead of one).
 

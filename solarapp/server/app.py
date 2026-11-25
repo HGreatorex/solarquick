@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from datetime import datetime, timezone
 
-from solarapp.core import events, export, hek, live, pipeline, resultcache, timings
+from solarapp.core import events, export, hek, live, pipeline, resultcache, stats, timings
 from solarapp.core.parser import parse
 from solarapp.core.registry import get_registry
 
@@ -31,6 +31,31 @@ class RunRequest(BaseModel):
     frames: int | None = None   # image timeline length
     crop_fov: float | None = None  # None keep, 0 full disk, >0 arcsec at flare
     label: str | None = None
+
+
+class StatsRequest(BaseModel):
+    """STATS page: a window of whole UT days and the panels to compute."""
+    start: str                      # YYYY-MM-DD
+    end: str
+    floor: str = "C1.0"
+    panels: list[str] = list(stats.PANELS)
+    rescale: bool = False
+    lead: int = 1
+    verify_class: str = "M"
+
+
+class EpochRequest(BaseModel):
+    start: str
+    end: str
+    class_min: str = "M1.0"
+    class_max: str | None = None
+    region: int | None = None
+    before_min: int = 60
+    after_min: int = 120
+    channel: str = "xrsb"
+    align: str = "curve"
+    limit: int = 50
+    exclude_overlaps: bool = True
 
 
 class FrameRequest(BaseModel):
@@ -186,6 +211,51 @@ def live_view(panels: str = "now") -> JSONResponse:
                             headers={"Cache-Control": "no-store"})
     except ValueError as e:
         return JSONResponse({"errors": [str(e)]}, status_code=422)
+
+
+def _ndjson(events) -> StreamingResponse:
+    def lines():
+        for event in events:
+            yield json.dumps(event, allow_nan=False) + "\n"
+    return StreamingResponse(lines(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+def _days(body) -> tuple:
+    from datetime import date
+    a, b = date.fromisoformat(body.start[:10]), date.fromisoformat(body.end[:10])
+    if b < a:
+        raise ValueError("end is before start")
+    return a, b
+
+
+@app.post("/api/stats/stream")
+def stats_stream(body: StatsRequest):
+    """STATS page as NDJSON: progress events (archive files read), then the result."""
+    try:
+        a, b = _days(body)
+        stats.day_range(a, b)
+        stats.class_flux(body.floor.upper())
+    except (ValueError, KeyError) as e:
+        return JSONResponse({"errors": [f"Bad request: {e}"]}, status_code=422)
+    return _ndjson(stats.stream(start=a, end=b, floor_cls=body.floor, panels=body.panels,
+                                rescale=body.rescale, lead=body.lead,
+                                verify_cls=body.verify_class.upper()))
+
+
+@app.post("/api/stats/epoch/stream")
+def epoch_stream(body: EpochRequest):
+    """Superposed epoch of the flares that match, as NDJSON (one progress event per flare)."""
+    try:
+        a, b = _days(body)
+        stats.day_range(a, b)
+        stats.class_flux(body.class_min.upper())
+    except (ValueError, KeyError) as e:
+        return JSONResponse({"errors": [f"Bad request: {e}"]}, status_code=422)
+    kw = body.model_dump(exclude={"start", "end"})
+    kw["class_min"] = kw["class_min"].upper()
+    kw["class_max"] = kw["class_max"].upper() if kw["class_max"] else None
+    return _ndjson(stats.stream_epoch(start=a, end=b, **kw))
 
 
 @app.get("/api/timings")

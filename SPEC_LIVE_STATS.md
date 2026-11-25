@@ -89,6 +89,50 @@ Event list = existing `flares` source (HEK/SWPC); cache per month.
 
 Opus to review S2/S4 maths before merge.
 
+### Phase 2 status (2026-11-25)
+Backend done (`core/stats.py`, tests/test_stats.py). Data source changed from HEK to SWPC
+daily archives (Edited Events / RSGA / SRS via NCEI) — faster, has satellites and regions.
+**Remaining: the UI** (Sonnet). API contract:
+
+`POST /api/stats/stream` `{start, end: "YYYY-MM-DD", floor: "C1.0", panels: [rates, dist,
+verify, regions], rescale: false, lead: 1, verify_class: "M"}` → NDJSON
+`{event:"progress", what: events|rsga|srs, done, total}` … then
+`{event:"result", start, end, n_events, coverage_note, era_note?, floor, rescale, panels}`;
+`{event:"error", error}` on failure; 422 JSON for bad input. Every panel may be `{error}`.
+- `rates`: months[], counts{B?,C,M,X: []}, coverage[] (0–1), ssn[], f107[], note
+- `dist`: n, alpha, sigma, alpha_boot_sd, xmin, xmin_class, ks, n_tail, gof_p,
+  hist{edges, counts, density}, ccdf{x, p}, model{x, density, ccdf}, note
+- `verify`: n, events, base_rate, brier, brier_clim, bss, reliability, resolution,
+  uncertainty, bins[{lo, hi, n, mean_p, freq, ci[2]}], roc[{pofd, pod, threshold}], auc,
+  tss_max, tss_threshold, persistence{n, brier, pod, pofd}, series{days, p, o}, lead, class, note
+- `regions`: table[{region, fi, n{C,M,X}, largest, largest_peak, first, last, max_area,
+  mcintosh_at_max, delta, mag_max, days_on_disk, query}], n_regions, unassigned,
+  rates{zurich[], mcintosh[], mag[]: {group, region_days, C|M|X: {rate, poisson_p, frac, ci}}, note}
+
+`POST /api/stats/epoch/stream` `{start, end, class_min: "M1.0", class_max, region,
+before_min: 60, after_min: 120, channel: xrsb|xrsa|lya, align: curve|catalogue, limit: 50
+(≤200), exclude_overlaps: true}` → progress (`events`, then `epoch` per flare) → result
+`{minutes[], flares[{peak, class, region, sat, offset_s, flux_peak, background, curve[],
+rise_min, duration_min, decay_efold_min}], stats{raw|norm|bgsub: {q25, median, q75, n}},
+derived{rise_min[], duration_min[], decay_efold_min[]}, matched, overlaps_dropped, used,
+largest_first, skipped[], label, note, coverage_note}`. Needs sunpy (Mac); untested live.
+
+UI to build (same pattern as LIVE: header `STATS` button, `body[data-mode]`, `#stats`;
+LIVE alert polling must keep running):
+- Left: start/end dates (default last 365 d to yesterday), floor (B1/C1/M1), rescale,
+  panel ticks, RUN with progress "events 120/366"; epoch box with the fields above, RUN EPOCH.
+- S1: stacked monthly bars C/M/X + sunspot number on y2; dim months with coverage < 1.
+- S2: log-log density histogram + model from x_min; CCDF + model; line "α = a ± boot_sd
+  above xmin_class (n_tail of n), GOF p". Show note.
+- S3: median + IQR band + faint individual curves; mode toggle raw (log y) / norm / bgsub;
+  histograms of rise, decay, duration; list skipped.
+- S4: reliability diagram (mean_p vs freq, CI bars, diagonal, base-rate line, bin counts),
+  ROC with persistence point and AUC; score table (BS, BS_clim, BSS, REL, RES, UNC, TSS);
+  lead/class selectors re-run only `verify`.
+- S5: region table (row click → regular view with `query`); bar charts of M and X rate by
+  Zurich and magnetic class with CI; McIntosh table.
+- Show era_note / coverage_note as a banner; every panel's note under it.
+
 ---
 
 ## Phase 3 — AR tracker upgrade (idea 3)

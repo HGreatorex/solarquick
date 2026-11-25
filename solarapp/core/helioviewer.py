@@ -64,6 +64,31 @@ def match_wavelength(query_lower: str, wavelengths: list[int]) -> int | None:
     return None
 
 
+def screenshot_url(t: datetime, channel: dict, crop: tuple | None = None,
+                   px: int = IMAGE_PX) -> str:
+    """Render URL for one frame at `px` square.
+
+    arcsec/pixel scales inversely with `px` so every size frames the same
+    field of view: a 128 px thumbnail shows the whole disk, not a crop of
+    its middle.
+    """
+    zoom = IMAGE_PX / px
+    if crop:
+        cx, cy, fov = crop
+        # crop centers arrive as helioprojective (north-positive) arcsec;
+        # Helioviewer's y0 is image-space (south-positive), hence the flip
+        x0, y0 = cx, -cy
+        scale = fov / IMAGE_PX
+    else:
+        x0, y0, scale = 0.0, 0.0, channel["scale"]
+    return (
+        f"{HV}/takeScreenshot/?date={t:%Y-%m-%dT%H:%M:%SZ}"
+        f"&imageScale={scale * zoom:g}&layers={channel['layer']}"
+        f"&x0={x0:.1f}&y0={y0:.1f}&width={px}&height={px}"
+        "&display=true&watermark=false"
+    )
+
+
 class HelioviewerImageSource(DataSource):
     """Base class: subclasses set channels, default_channel, name/keywords/parse_extras."""
 
@@ -164,24 +189,4 @@ class HelioviewerImageSource(DataSource):
 
     def _screenshot_url(self, t: datetime, channel: dict, crop: tuple | None = None,
                         px: int = IMAGE_PX) -> str:
-        """Render URL for one frame at `px` square.
-
-        arcsec/pixel scales inversely with `px` so every size frames the same
-        field of view: a 128 px thumbnail shows the whole disk, not a crop of
-        its middle.
-        """
-        zoom = IMAGE_PX / px
-        if crop:
-            cx, cy, fov = crop
-            # crop centers arrive as helioprojective (north-positive) arcsec;
-            # Helioviewer's y0 is image-space (south-positive), hence the flip
-            x0, y0 = cx, -cy
-            scale = fov / IMAGE_PX
-        else:
-            x0, y0, scale = 0.0, 0.0, channel["scale"]
-        return (
-            f"{HV}/takeScreenshot/?date={t:%Y-%m-%dT%H:%M:%SZ}"
-            f"&imageScale={scale * zoom:g}&layers={channel['layer']}"
-            f"&x0={x0:.1f}&y0={y0:.1f}&width={px}&height={px}"
-            "&display=true&watermark=false"
-        )
+        return screenshot_url(t, channel, crop, px)

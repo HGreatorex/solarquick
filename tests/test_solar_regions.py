@@ -312,6 +312,8 @@ def test_a_range_adds_a_trend_and_keeps_every_days_rows(monkeypatch):
 
 
 def test_a_named_region_is_tracked_across_the_days(monkeypatch):
+    from solarapp.core import artrack   # the Phase 3 extras are tested in test_artrack
+    monkeypatch.setattr(artrack, "extend", lambda spec, ar, rows, window: spec.update(enriched=ar))
     days = _days(date(2017, 9, 4), 3)
     snapshots = [
         _snapshot(days[0], [("2673", -8, 16, 680, 28, "Beta-Gamma-Delta"),
@@ -326,6 +328,7 @@ def test_a_named_region_is_tracked_across_the_days(monkeypatch):
     assert len(spec["track"]["x"]) == 3
     assert spec["track"]["x"][0] < spec["track"]["x"][-1]  # rotating westward
     assert spec["trend"][0]["series"][0]["values"] == [680, 880, 960]
+    assert spec["enriched"] == "2673"
 
 
 def test_a_region_that_never_appears_says_so(monkeypatch):

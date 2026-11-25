@@ -658,6 +658,10 @@ class SolarRegions(DataSource):
             notes.append(f"AR {ar} is listed without spots on every day in range.")
         if notes:
             spec["note"] = " ".join(notes)
+        if extras.get("enrich", True):
+            # flares, magnetic-class timeline, SHARP, cut-outs (Phase 3)
+            from solarapp.core import artrack   # imports this module
+            artrack.extend(spec, ar, rows, (min(snapshots), max(snapshots)))
         return spec
 
 

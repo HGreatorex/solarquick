@@ -148,6 +148,39 @@ Extends existing `solar_regions._track` ("track AR 14503").
 - Daily cut-out strip (AIA 171 + HMI magnetogram) following the region with existing
   `synodic_rate`.
 
+### Phase 3 status (2026-11-25)
+Backend done: `core/artrack.py`, called from `solar_regions._track` (extras `enrich: false`
+skips it). Live-checked on AR 12673 (Sep 2017: 85 flares incl. X9.3/X8.2, δ onset 09-04,
+HARP 7115 definitive) and AR 14579 (Nov 2026: near-real-time HARP 14206). Each block may be
+`{error}` on its own. x, y are solar radii in the same frame as `regions` rows and `track`.
+- `flares`: {list[{peak, begin, end, class, flux, sat, x, y}] (x/y null past the limb),
+  counts{B,C,M,X}, fi, largest, largest_peak, start, end, note}. Source: SWPC Edited Events
+  region numbers, window = summary days read ±1 day.
+- `mag_timeline`: [{valid, mag, mcintosh, delta, area, spots}]; `delta_onset`: date | null.
+- `sharp` (absent before 2010-05): {harp, noaa, series (definitive | near-real-time | both),
+  nrt_from, shared_with[], other_harps[], times[] (UTC, hourly), lon[] (LON_FWT), quality[],
+  params[{key, label, unit, log, values[]}] for USFLUX, TOTUSJH, TOTPOT, R_VALUE, MEANSHR,
+  AREA_ACR, far[[t0, t1]] (|lon| > far_lon = 60°), note}. Selected by
+  `[? NOAA_ARS like '%1NNNN%' ?]` (no HARP map file); records with USFLUX = 0 → null.
+  QUALITY ≠ 0 records are kept and counted (all NRT records carry 0x400) — Harry to confirm.
+- `cutouts`: {fov (400″), frames[{day, time (SRS 2400 UT instant), x, y (arcsec), lon,
+  images[{label, url (256 px), full_url (1024 px)}]}], note}. AIA 171 + HMI magnetogram;
+  EIT 195 + MDI magnetogram before 2010-05-13.
+
+UI to build (Sonnet), in `renderRegions` when `d.track`:
+- Disk map: flares on the track at (x, y), marker size/colour by class (C cyan, M yellow,
+  X red), hover class + peak UT.
+- Flare timeline: peak flux vs time, log y with A–X bands (as GOES plots), coloured by class;
+  line "C n · M n · X n · FI · largest"; note.
+- Magnetic class strip: one cell per day (α, β, βγ, βγδ …), δ days red, "δ onset" label,
+  McIntosh class as text.
+- SHARP: six small panels sharing the time axis (log y where `log`), `far` intervals shaded
+  grey, M/X flares as dotted vertical lines, `nrt_from` marked; note; error line if `{error}`.
+- Cut-out strip: horizontal row of daily pairs (EUV above, magnetogram below), lazy-loaded,
+  click opens `full_url`; day + longitude label.
+- Existing area/spots trend panels: same M/X flare lines.
+- Any block's `{error}` shows as one line in its place.
+
 ---
 
 ## Phase 4 — Multi-viewpoint (idea 4) — feasible; much already exists

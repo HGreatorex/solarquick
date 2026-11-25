@@ -42,6 +42,7 @@ solarapp/
 │   │   ├── summary.py       ← the overview a bare date composes
 │   │   ├── live.py          ← LIVE mode: SWPC feeds → page blocks for /api/live
 │   │   ├── stats.py         ← STATS page: SWPC daily archives → flare statistics
+│   │   ├── artrack.py       ← AR tracker extras: flares, mag class, SHARP (JSOC), cut-outs
 │   │   ├── timings.py       ← learned per-source durations (~/.cache/solarapp)
 │   │   ├── helioviewer.py   ← shared Helioviewer image pipeline (channel tables)
 │   │   ├── tsutil.py        ← df→series, clip, downsample, energy-band select
@@ -66,7 +67,7 @@ solarapp/
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
 │       └── static/index.html← two-pane UI: form (left) + image grid & plots (right)
-└── tests/                   ← 497, all offline
+└── tests/                   ← 505, all offline
 ```
 
 ## The two-pane UI
@@ -306,6 +307,10 @@ It is a view over NOAA SWPC's open feeds, not a DataSource: no window, no parser
   so classes match SWPC's, not the NCEI science archive's.
 - Caveats: the page must stay open for alerts; detection latency is the poll interval
   plus SWPC's own ~1 min.
+
+## AR tracker (Phase 3)
+
+`solar_regions._track` calls `artrack.extend(spec, ar, rows, window)`: flare history from the SWPC Edited Events (`stats.catalogue`), daily Hale/McIntosh timeline and δ onset, hourly HMI SHARPs from JSOC (definitive, then `_nrt` where definitive lags), and Helioviewer cut-out pairs at each SRS instant. Blocks fail independently. Contract: SPEC_LIVE_STATS.md, Phase 3 status.
 
 ## STATS (UI and backend)
 
@@ -566,7 +571,7 @@ fail alone with `{"error"}`). Field-by-field contract: SPEC_LIVE_STATS.md, Phase
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (497, all offline — external APIs are never
+template. Tests: `pytest tests/` (505, all offline — external APIs are never
 called from the suite, and a test that quietly starts doing so shows up as a
 suite that takes twenty seconds instead of one).
 

@@ -167,7 +167,7 @@ HARP 7115 definitive) and AR 14579 (Nov 2026: near-real-time HARP 14206). Each b
   images[{label, url (256 px), full_url (1024 px)}]}], note}. AIA 171 + HMI magnetogram;
   EIT 195 + MDI magnetogram before 2010-05-13.
 
-UI to build (Sonnet), in `renderRegions` when `d.track`:
+**UI done 2026-11-25** (`renderTrackExtras`, `plotFlareTimeline`, `plotSharp` in index.html; M/X lines also on the area/spots panels, coloured by class). Built to:
 - Disk map: flares on the track at (x, y), marker size/colour by class (C cyan, M yellow,
   X red), hover class + peak UT.
 - Flare timeline: peak flux vs time, log y with A–X bands (as GOES plots), coloured by class;

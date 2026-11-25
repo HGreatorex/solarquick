@@ -33,6 +33,20 @@
   .imgview .note { color:#ffff00; font-size:.85rem; text-align:center; margin:.5rem 0; }
   .regions .rsum { color:#00ffff; font-size:.82rem; margin:.5rem 0; }
   .regions .rsum b { color:#ffffff; font-weight:600; }
+  .trk-h { font-family:"VT323", monospace; font-size:22px; background:#0000ff; color:#ffff00;
+           padding:.25rem .6rem; margin:1rem 0 .4rem; line-height:1; }
+  .trk-note { color:#00ffff; font-size:.78rem; margin:.3rem 0 .6rem; }
+  .trk-mag, .trk-cut { display:flex; gap:4px; overflow-x:auto; padding-bottom:.4rem; }
+  .trk-mag div { flex:none; min-width:3.6rem; border:2px solid #0000ff; padding:.2rem .3rem;
+                 text-align:center; display:flex; flex-direction:column; gap:.1rem; font-size:.75rem; }
+  .trk-mag span { color:#00ffff; }
+  .trk-mag b { font-family:"VT323", monospace; font-size:22px; font-weight:400; color:#ffffff; }
+  .trk-mag small { color:#ffff00; }
+  .trk-mag div.dl { background:#ff0000; border-color:#ff0000; }
+  .trk-mag div.dl span, .trk-mag div.dl small { color:#ffffff; }
+  .trk-cut > div { flex:none; display:flex; flex-direction:column; gap:3px; align-items:center; }
+  .trk-cut span { color:#00ffff; font-size:.75rem; }
+  .trk-cut img { width:128px; height:128px; display:block; background:#000000; border:1px solid #0000ff; }
   .events h2 { font-size:1rem; font-weight:600; text-align:center; margin:.8rem 0 .4rem; }
   .events table { width:100%; border-collapse:collapse; font-size:.9rem; }
   .events th, .events td { padding:.35rem .6rem; text-align:left;
@@ -1098,7 +1112,7 @@ function renderRegions(d, stats) {
     const el = document.createElement("div");
     el.style.height = "240px";
     box.appendChild(el); plots.push(el);
-    plotTimeseries(el, t, true, null);
+    plotTimeseries(el, t, true, d.track ? trackFlareMarks(d) : null);
     stats.points += t.series.reduce((a, s) => a + s.values.length, 0);
   });
 
@@ -1114,6 +1128,8 @@ function renderRegions(d, stats) {
     plotRegionDisk(el, d, mapped);
   }
 
+  if (d.track) renderTrackExtras(box, d, plots, stats);
+
   const table = d.track ? rows : shown.filter(r => r.section === d.table_section);
   box.appendChild(regionTable(d, table));
   const extras = d.track ? [] : shown.filter(r => r.section !== d.table_section);
@@ -1121,6 +1137,136 @@ function renderRegions(d, stats) {
 
   stats.points += rows.length;
   downloadBar(d, {plots});
+}
+
+// -- AR tracker extras (Phase 3): flares, magnetic class, SHARP, cut-outs ----
+const FLARE_COLOUR = {A: "#ffffff", B: "#ffffff", C: "#00ffff", M: "#ffff00", X: "#ff0000"};
+const FLARE_SIZE = {A: 5, B: 6, C: 8, M: 12, X: 16};
+const CLASS_BANDS = [["A", 1e-8, 1e-7], ["B", 1e-7, 1e-6], ["C", 1e-6, 1e-5], ["M", 1e-5, 1e-4], ["X", 1e-4, 1e-3]];
+const MAG_SYM = {alpha: "α", beta: "β", gamma: "γ", delta: "δ"};
+const magShort = m => m ? m.toLowerCase().split("-").map(x => MAG_SYM[x] || x).join("") : "–";
+const lonLabel = lon => lon === null || lon === undefined ? "" : (lon < 0 ? "E" : "W") + Math.round(Math.abs(lon));
+
+function trackFlareMarks(d) {          // M and X flares as lines on time axes; X labelled
+  const f = d.flares;
+  if (!f || f.error) return [];
+  return f.list.filter(x => /^[MX]/.test(x.class))
+    .map(x => ({t: x.peak, label: x.class[0] === "X" ? x.class : "", cls: x.class[0], color: FLARE_COLOUR[x.class[0]]}));
+}
+
+function trackPart(box, cls, html) {
+  const el = document.createElement("div");
+  el.className = cls; el.innerHTML = html; box.appendChild(el); return el;
+}
+
+function renderTrackExtras(box, d, plots, stats) {
+  const f = d.flares;
+  if (f) {
+    trackPart(box, "trk-h", "FLARES FROM THIS REGION");
+    if (f.error) trackPart(box, "evhint", `Flare history unavailable: ${escapeHtml(f.error)}`);
+    else {
+      const c = f.counts;
+      trackPart(box, "rsum", `<b>${f.list.length}</b> flares ${f.start} → ${f.end} · C <b>${c.C}</b> · M <b>${c.M}</b> · X <b>${c.X}</b>` +
+        ` · flare index <b>${f.fi}</b>` + (f.largest ? ` · largest <b>${escapeHtml(f.largest)}</b> at ${utc(f.largest_peak)} UT` : ""));
+      if (f.list.length) {
+        const el = trackPart(box, "", ""); el.style.height = "260px"; plots.push(el);
+        plotFlareTimeline(el, f); stats.points += f.list.length;
+      }
+      trackPart(box, "trk-note", escapeHtml(f.note || ""));
+    }
+  }
+
+  const mt = d.mag_timeline || [];
+  if (mt.length) {
+    trackPart(box, "trk-h", "MAGNETIC CLASS");
+    trackPart(box, "rsum", d.delta_onset ? `δ first reported <b>${d.delta_onset}</b> (2400 UT summary)`
+                                         : "No δ configuration reported in this window");
+    trackPart(box, "trk-mag", mt.map(m =>
+      `<div class="${m.delta ? "dl" : ""}" title="${escapeHtml(m.mag || "")} · ${escapeHtml(m.mcintosh || "")} · ` +
+      `${m.area ?? "–"} µhem · ${m.spots ?? "–"} spots"><span>${m.valid.slice(5)}</span>` +
+      `<b>${magShort(m.mag)}</b><small>${escapeHtml(m.mcintosh || "")}</small></div>`).join(""));
+  }
+
+  const s = d.sharp;
+  if (s) {
+    trackPart(box, "trk-h", s.error ? "HMI SHARP" : `HMI SHARP · HARP ${s.harp} · NOAA ${s.noaa} · ${escapeHtml(s.series)}`);
+    if (s.error) trackPart(box, "evhint", `SHARP unavailable: ${escapeHtml(s.error)}`);
+    else {
+      const el = trackPart(box, "", ""); el.style.height = `${115 * s.params.length + 70}px`; plots.push(el);
+      plotSharp(el, s, trackFlareMarks(d)); stats.points += s.times.length * s.params.length;
+      trackPart(box, "trk-note", escapeHtml(s.note || "") + " Dotted lines: M (yellow) and X (red) flares from this region.");
+    }
+  }
+
+  const co = d.cutouts;
+  if (co) {
+    trackPart(box, "trk-h", "DAILY CUT-OUTS");
+    if (co.error) trackPart(box, "evhint", `Cut-outs unavailable: ${escapeHtml(co.error)}`);
+    else if (co.frames.length) {
+      trackPart(box, "trk-cut", co.frames.map(fr => `<div><span>${fr.day.slice(5)} · ${lonLabel(fr.lon)}</span>` +
+        fr.images.map(im => `<a href="${escapeHtml(im.full_url)}" target="_blank" rel="noopener" ` +
+          `title="${escapeHtml(im.label)} · ${fr.time.slice(0, 16).replace("T", " ")} UT · click for 1024 px">` +
+          `<img loading="lazy" src="${escapeHtml(im.url)}" alt="${escapeHtml(im.label)}"></a>`).join("") + `</div>`).join(""));
+      stats.frames += co.frames.length * co.frames[0].images.length;
+      trackPart(box, "trk-note", escapeHtml(co.frames[0].images.map(i => i.label).join(" (top), ") + " (bottom). " + co.note));
+    } else trackPart(box, "evhint", "No day with the region on the visible disk.");
+  }
+}
+
+function plotFlareTimeline(el, f) {
+  const traces = ["B", "C", "M", "X"].map(k => {
+    const g = f.list.filter(x => x.class[0] === k);
+    return {type: "scatter", mode: "markers", name: k, x: g.map(x => x.peak), y: g.map(x => x.flux),
+      text: g.map(x => x.class), marker: {color: FLARE_COLOUR[k], size: FLARE_SIZE[k], symbol: "diamond"},
+      hovertemplate: "%{text} · %{x|%Y-%m-%d %H:%M} UT<extra></extra>"};
+  }).filter(t => t.x.length);
+  const fl = f.list.map(x => Math.log10(x.flux));
+  const lo = Math.min(-6, Math.floor(Math.min(...fl) * 2) / 2 - 0.3), hi = Math.max(-4, Math.max(...fl) + 0.4);
+  const shapes = [], annotations = [];
+  CLASS_BANDS.forEach(([k, a, b], i) => {
+    if (i % 2) shapes.push({type: "rect", xref: "paper", x0: 0, x1: 1, yref: "y", y0: a, y1: b,
+                            fillcolor: "rgba(0,0,255,0.28)", line: {width: 0}, layer: "below"});
+    const mid = Math.log10(Math.sqrt(a * b));
+    if (mid > lo && mid < hi) annotations.push({xref: "paper", x: 1.005, xanchor: "left", yref: "y", y: mid,
+      text: k, showarrow: false, font: {color: "#00ffff", size: 11}});
+  });
+  Plotly.newPlot(el, traces, {
+    ...DARK, margin: {t: 10, b: 40, l: 62, r: 30}, shapes, annotations,
+    xaxis: {type: "date", gridcolor: "#0000ff", range: [f.start, `${f.end}T23:59:59`]},
+    yaxis: {type: "log", range: [lo, hi], gridcolor: "#0000ff", title: {text: "GOES 1–8 Å peak (W m⁻²)", font: {size: 11}},
+            exponentformat: "power"},
+    legend: {orientation: "h", y: -0.2, font: {size: 11}},
+  }, {responsive: true});
+}
+
+function plotSharp(el, s, marks) {
+  const n = s.params.length, gap = 0.03, h = (1 - gap * (n - 1)) / n;
+  const colours = ["#ffff00", "#00ffff", "#00ff00", "#ff00ff", "#ffffff", "#ff0000"];
+  const layout = {...DARK, margin: {t: 22, b: 40, l: 72, r: 20}, showlegend: false, shapes: [], annotations: [],
+                  xaxis: {type: "date", gridcolor: "#0000ff", anchor: `y${n}`}};
+  const traces = s.params.map((p, i) => {
+    const top = 1 - i * (h + gap);
+    layout[i ? `yaxis${i + 1}` : "yaxis"] = {domain: [top - h, top], type: p.log ? "log" : "linear", anchor: "x",
+      gridcolor: "#0000ff", tickfont: {size: 9}, exponentformat: "power", nticks: 4};
+    layout.annotations.push({xref: "paper", yref: "paper", x: 0.005, y: top, xanchor: "left", yanchor: "top",
+      text: `${p.label} (${p.unit})`, showarrow: false, font: {size: 10, color: "#00ffff"}, bgcolor: "rgba(0,0,0,0.7)"});
+    return {type: "scatter", mode: "lines", x: s.times, y: p.values, yaxis: i ? `y${i + 1}` : "y",
+            line: {color: colours[i % colours.length], width: 1.5}, connectgaps: false,
+            hovertemplate: `${p.key} %{y:.4~g} ${p.unit}<br>%{x|%Y-%m-%d %H:%M} UT<extra></extra>`};
+  });
+  s.far.forEach(([a, b]) => layout.shapes.push({type: "rect", xref: "x", yref: "paper", x0: a, x1: b, y0: 0, y1: 1,
+    fillcolor: "rgba(255,255,255,0.13)", line: {width: 0}, layer: "below"}));
+  marks.forEach(m => layout.shapes.push({type: "line", xref: "x", yref: "paper", x0: m.t, x1: m.t, y0: 0, y1: 1,
+    line: {color: m.cls === "X" ? "#ff0000" : "#ffff00", width: 1, dash: "dot"}}));
+  if (s.far.length) layout.annotations.push({xref: "x", yref: "paper", x: s.far[0][0], y: 1, xanchor: "left",
+    yanchor: "bottom", text: `|CMD| > ${s.far_lon}°`, showarrow: false, font: {size: 10, color: "#ffffff"}});
+  if (s.nrt_from) {
+    layout.shapes.push({type: "line", xref: "x", yref: "paper", x0: s.nrt_from, x1: s.nrt_from, y0: 0, y1: 1,
+                        line: {color: "#ff00ff", width: 2}});
+    layout.annotations.push({xref: "x", yref: "paper", x: s.nrt_from, y: 1, xanchor: "left", yanchor: "bottom",
+                             text: " near-real-time →", showarrow: false, font: {size: 10, color: "#ff00ff"}});
+  }
+  Plotly.newPlot(el, traces, layout, {responsive: true});
 }
 
 function plotRegionDisk(el, d, rows) {
@@ -1146,6 +1292,15 @@ function plotRegionDisk(el, d, rows) {
       marker: {size: rows.map(size), color: rows.map(r => COMPLEXITY[r.complexity].color),
                line: {color: "#000000", width: 1}},
       hovertemplate: "%{customdata}", customdata: rows.map(hover), showlegend: false,
+    });
+    const fl = d.flares && !d.flares.error ? d.flares.list.filter(x => x.x !== null && x.x !== undefined) : [];
+    ["B", "C", "M", "X"].forEach(k => {
+      const g = fl.filter(x => x.class[0] === k);
+      if (g.length) traces.push({
+        x: g.map(x => x.x), y: g.map(x => x.y), mode: "markers", name: `${k} flares`,
+        marker: {symbol: "star", size: FLARE_SIZE[k], color: FLARE_COLOUR[k], line: {color: "#000000", width: 1}},
+        text: g.map(x => `${x.class} · ${utc(x.peak)} UT`), hovertemplate: "%{text}<extra></extra>",
+      });
     });
   } else {
     const plages = rows.filter(r => r.section === "plage");
@@ -1248,9 +1403,9 @@ function plotTimeseries(el, d, compact, markers) {
   const isTimeAxis = d.series.some(s => s.times);
   if (isTimeAxis) (markers || []).forEach(mk => {
     shapes.push({type:"line", x0:mk.t, x1:mk.t, xref:"x", yref:"paper", y0:0, y1:1,
-      line:{color:"#ff0000", width:1, dash:"dot"}});
-    annotations.push({x:mk.t, xref:"x", yref:"paper", y:1.02, text:mk.label,
-      showarrow:false, font:{color:"#ff0000", size:10}});
+      line:{color: mk.color || "#ff0000", width:1, dash:"dot"}});
+    if (mk.label) annotations.push({x:mk.t, xref:"x", yref:"paper", y:1.02, text:mk.label,
+      showarrow:false, font:{color: mk.color || "#ff0000", size:10}});
   });
   // the image grid's timeline cursor, on every time axis below it
   let cursorIdx = -1;

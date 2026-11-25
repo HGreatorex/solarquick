@@ -175,6 +175,16 @@ instrument to go deeper.
 
 Examples that work:
 
+**One active region over its disk passage**
+```
+ar 2673 from 2017-08-29 to 2017-09-11
+active region 4579 last 2 weeks
+```
+Its track on the disk with the region's flares on it, a flare timeline,
+the daily magnetic class (δ days in red), hourly HMI SHARP parameters
+(2010 onward; shaded where the region is more than 60° from central meridian)
+and a daily AIA 171 / HMI magnetogram cut-out strip.
+
 **Timeseries**
 ```
 goes sxr yesterday

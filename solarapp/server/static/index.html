@@ -46,6 +46,10 @@
   .trk-mag div.dl span, .trk-mag div.dl small { color:#ffffff; }
   .trk-cut > div { flex:none; display:flex; flex-direction:column; gap:3px; align-items:center; }
   .trk-cut span { color:#00ffff; font-size:.75rem; }
+  .vp-body { display:flex; gap:1rem; align-items:flex-start; flex-wrap:wrap; }
+  .vp-map { width:340px; height:340px; flex:none; }
+  .vp-body .lv-table { flex:1; min-width:420px; }
+  .vp-now td { background:#0000ff; }
   .trk-cut img { width:128px; height:128px; display:block; background:#000000; border:1px solid #0000ff; }
   .events h2 { font-size:1rem; font-weight:600; text-align:center; margin:.8rem 0 .4rem; }
   .events table { width:100%; border-collapse:collapse; font-size:.9rem; }
@@ -941,6 +945,7 @@ function renderItem(item, compact, stats, markers) {
   if (item.kind === "images") { renderImageGrid([item], stats, [item]); return; }
   if (item.kind === "events") { renderEvents(item, stats); return; }
   if (item.kind === "regions") { renderRegions(item, stats); return; }
+  if (item.kind === "viewpoints") { renderViewpoints(item, stats); return; }
   if (item.kind === "spectral_movie") { renderMovie(item, stats, markers); return; }
   const specs = item.kind === "panels" ? item.panels : [item];
   const plots = [];
@@ -1137,6 +1142,83 @@ function renderRegions(d, stats) {
 
   stats.points += rows.length;
   downloadBar(d, {plots});
+}
+
+// -- VIEWPOINTS (Phase 4): the flare from Earth, Solar Orbiter and STEREO-A ----
+const VP_STATUS = {"on disk": "#00ff00", "near limb": "#ffff00", "behind limb": "#ff00ff", "far side": "#ff0000"};
+
+function renderViewpoints(d, stats) {
+  const plots = [];
+  const box = document.createElement("div");
+  box.className = "events viewpoints";
+  plotDiv.appendChild(box);
+  box.innerHTML = `<h2>${escapeHtml(d.title)}</h2>`;
+  const ll = (lat, lon) => lat === null || lat === undefined ? "–"
+    : `${lat >= 0 ? "N" : "S"}${Math.abs(lat).toFixed(0)} ${lon >= 0 ? "W" : "E"}${Math.abs(lon).toFixed(0)}`;
+  const sees = o => {
+    if (!o.status) return "–";
+    const extra = o.status === "behind limb" && o.visible_above_mm !== null
+      ? ` · clears the limb above ${o.visible_above_mm} Mm` : "";
+    return `<span style="color:${VP_STATUS[o.status]}">${o.status}</span>${extra}`;
+  };
+  const lead = s => !s ? "—" : `${Math.abs(s).toFixed(0)} s ${s > 0 ? "before" : "after"} Earth`;
+  const body = trackPart(box, "vp-body", "");
+  const map = document.createElement("div"); map.className = "vp-map"; body.appendChild(map); plots.push(map);
+  const table = document.createElement("table"); table.className = "lv-table"; body.appendChild(table);
+  table.innerHTML = `<thead><tr><th>Observer</th><th>Distance</th><th>Position</th><th>θ site</th>` +
+    `<th>What it sees</th><th>Light arrives</th></tr></thead><tbody>` +
+    d.observers.map(o => `<tr><td style="color:${o.color}">${escapeHtml(o.name)}</td><td>${o.r_au.toFixed(3)} AU</td>` +
+      `<td>${o.name === "Earth" ? "—" : ll(o.lat, o.lon)}</td><td>${o.theta === null ? "–" : o.theta + "°"}</td>` +
+      `<td>${sees(o)}</td><td>${lead(o.light_lead_s)}</td></tr>`).join("") + `</tbody>`;
+  plotViewpointMap(map, d);
+  stats.points += d.observers.length;
+
+  const st = d.stix;
+  if (st) {
+    trackPart(box, "trk-h", "STIX ON SOLAR ORBITER");
+    if (st.error) trackPart(box, "evhint", `STIX flare list unavailable: ${escapeHtml(st.error)}`);
+    else if (!st.flares.length) trackPart(box, "evhint", "No STIX flares listed in this window.");
+    else {
+      const peak = Date.parse(d.peak);
+      const near = st.flares.reduce((b, f) => Math.abs(Date.parse(f.peak) - peak) < Math.abs(Date.parse(b.peak) - peak) ? f : b);
+      trackPart(box, "", `<table class="lv-table"><thead><tr><th>Peak at 1 AU</th><th>GOES seen</th>` +
+        `<th>STIX estimate</th><th>Range</th><th>Attenuator</th></tr></thead><tbody>` +
+        st.flares.slice().sort((a, b) => a.peak < b.peak ? -1 : 1).map(f =>
+          `<tr class="${f === near ? "vp-now" : ""}"><td>${utc(f.peak)}:${f.peak.slice(17, 19)}</td>` +
+          `<td>${escapeHtml(f.goes_seen || "–")}</td><td><b>${escapeHtml(f.est || "–")}</b></td>` +
+          `<td>${escapeHtml(f.est_min || "?")}–${escapeHtml(f.est_max || "?")}</td><td>${f.att_in ? "in" : ""}</td></tr>`).join("") +
+        `</tbody></table>`);
+      trackPart(box, "trk-note", escapeHtml(st.note || ""));
+      stats.points += st.flares.length;
+    }
+  }
+  downloadBar(d, {plots});   // d.note is shown with the result's other notes, above
+}
+
+function plotViewpointMap(el, d) {
+  // ecliptic-plane view from the north: Earth along +x, Stonyhurst west (+lon) along +y
+  const xy = (r, lon) => [r * Math.cos(lon * Math.PI / 180), r * Math.sin(lon * Math.PI / 180)];
+  const traces = [], rmax = Math.max(1.05, ...d.observers.map(o => o.r_au)) * 1.18;
+  d.observers.forEach(o => {
+    const [x, y] = xy(o.r_au, o.lon);
+    traces.push({x: [0, x], y: [0, y], mode: "lines", line: {color: o.color, width: 1, dash: "dot"}, hoverinfo: "skip"});
+    traces.push({x: [x], y: [y], mode: "markers+text", text: [o.name], textposition: y >= 0 ? "top center" : "bottom center",
+                 textfont: {color: o.color, size: 11}, marker: {color: o.color, size: 10},
+                 hovertemplate: `${o.name}<br>${o.r_au.toFixed(3)} AU · lon ${o.lon.toFixed(1)}°<extra></extra>`});
+  });
+  traces.push({x: [0], y: [0], mode: "markers", marker: {color: "#ffff00", size: 16}, hoverinfo: "skip"});
+  if (d.flare.lon !== null && d.flare.lon !== undefined) {
+    const [fx, fy] = xy(0.32 * rmax, d.flare.lon);
+    traces.push({x: [0, fx], y: [0, fy], mode: "lines+markers", line: {color: "#ff0000", width: 3},
+                 marker: {symbol: ["circle", "star"], size: [1, 15], color: "#ff0000"},
+                 hovertemplate: `flare site: Stonyhurst lon ${d.flare.lon.toFixed(1)}°<extra></extra>`});
+  }
+  Plotly.newPlot(el, traces, {
+    ...DARK, showlegend: false, margin: {t: 10, b: 10, l: 10, r: 10},
+    xaxis: {range: [-rmax, rmax], visible: false}, yaxis: {range: [-rmax, rmax], visible: false, scaleanchor: "x"},
+    annotations: [{x: 0, y: -rmax * 0.95, text: "Sun · Earth along +x · west up", showarrow: false,
+                   font: {size: 10, color: "#00ffff"}}],
+  }, {responsive: true});
 }
 
 // -- AR tracker extras (Phase 3): flares, magnetic class, SHARP, cut-outs ----

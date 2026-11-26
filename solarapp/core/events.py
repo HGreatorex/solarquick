@@ -12,8 +12,10 @@ An event view narrows the time range to the flare's rise–decay window
 (padded) and, when the user asked for nothing else, adds companions:
 GOES XRS for the light curve, AIA 131+304 cropped to the flare site when
 the catalog has a usable position (EIT 195 full-disk for pre-SDO events),
-STIX when Solar Orbiter was flying, and the FISM2 spectral movie (raw model
-irradiance) for any flare since 2003.
+STIX when Solar Orbiter was flying, the FISM2 spectral movie (raw model
+irradiance) for any flare since 2003, and since STEREO (2006-10) a VIEWPOINTS
+block, with Solar Orbiter EUI and STEREO-A EUVI images when the site is in
+their view and they have an image near the peak.
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from solarapp.core.parser import ParsedQuery, SourceRequest
 
 SDO_ERA = datetime(2010, 5, 1, tzinfo=timezone.utc)
 STIX_ERA = datetime(2020, 4, 14, tzinfo=timezone.utc)
+STEREO_ERA = datetime(2006, 10, 27, tzinfo=timezone.utc)
 FISM_ERA = datetime(2003, 1, 1, tzinfo=timezone.utc)
 CROP_FOV = 500.0  # arcsec field of view around the flare site
 
@@ -43,7 +46,10 @@ def expand(parsed: ParsedQuery) -> None:
                 f"{parsed.start:%Y-%m-%d} and {parsed.end:%Y-%m-%d}."
             )
     elif req.extras.pop("at", False):
-        mid = parsed.start + (parsed.end - parsed.start) / 2
+        # "flare at 16:51" parses to the hour from 16:51: the stated instant is
+        # its start, not its middle. A wider window (a bare date) means its middle.
+        span = parsed.end - parsed.start
+        mid = parsed.start if span <= timedelta(hours=1) else parsed.start + span / 2
         flare = hek.flare_near(mid)
         if flare is None:
             raise RuntimeError(
@@ -77,3 +83,21 @@ def expand(parsed: ParsedQuery) -> None:
         parsed.requests.append(SourceRequest("solo_stix", {}))
     if flare.peak >= FISM_ERA:
         parsed.requests.append(SourceRequest("fism", {}))
+    if flare.peak >= STEREO_ERA:
+        _add_viewpoints(parsed, flare)
+
+
+def _add_viewpoints(parsed: ParsedQuery, flare) -> None:
+    from solarapp.core import viewpoints
+    from solarapp.sources.viewpoints import flare_site
+    site = flare_site(flare) or {}    # unplaced: still positions and STIX, no extra images
+    try:   # the other vantage points' images, where they can see the site
+        extra = viewpoints.companions(flare.peak, hpc=site.get("hpc"), hgs=site.get("hgs"))
+    except Exception:  # noqa: BLE001 — the VIEWPOINTS block reports the failure itself
+        extra = []
+    # images join the grid before the block, so they sit with AIA
+    at = next((i for i, r in enumerate(parsed.requests) if r.source == "solo_stix"), len(parsed.requests))
+    for source, extras in reversed(extra):
+        parsed.requests.insert(at, SourceRequest(source, extras))
+    parsed.requests.append(SourceRequest("viewpoints", {
+        "peak": flare.peak.isoformat(), "label": flare.label(), **site}))

@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from solarapp.core import events, hek
+from solarapp.core import events, hek, viewpoints
+from solarapp.sources import viewpoints as vp_source
 from solarapp.core.parser import ParsedQuery, SourceRequest
 
 
@@ -41,6 +42,9 @@ def stub_hek(monkeypatch):
         monkeypatch.setattr(hek, "flare_near", lambda t, **kw: flare)
         monkeypatch.setattr(events.hek, "biggest_flare", lambda s, e: flare)
         monkeypatch.setattr(events.hek, "flare_near", lambda t, **kw: flare)
+    # VIEWPOINTS needs ephemerides and Helioviewer: offline here, no extra images
+    monkeypatch.setattr(viewpoints, "companions", lambda t, **site: [])
+    monkeypatch.setattr(vp_source, "region_site", lambda flare: None)
     return install
 
 
@@ -54,9 +58,31 @@ def test_sdo_era_composes_xrs_aia_and_stix(stub_hek):
     stub_hek(make_flare(utc(2022, 4, 20, 3, 57)))
     p = parsed_for({"superlative": True})
     events.expand(p)
-    assert sources_of(p) == ["flares", "goes_xrs", "sdo_images", "sdo_images", "solo_stix", "fism"]
+    assert sources_of(p) == ["flares", "goes_xrs", "sdo_images", "sdo_images", "solo_stix", "fism",
+                             "viewpoints"]
     assert [r.extras["channel"] for r in p.requests if r.source == "sdo_images"] \
         == ["aia_131", "aia_304"]
+    vp = p.requests[-1].extras
+    assert vp["hpc"] == (515.0, -232.0) and vp["peak"] == utc(2022, 4, 20, 3, 57).isoformat() \
+        and "estimated" not in vp
+
+
+def test_other_vantage_points_join_the_image_grid(stub_hek, monkeypatch):
+    stub_hek(make_flare(utc(2024, 5, 14, 16, 51)))
+    monkeypatch.setattr(viewpoints, "companions", lambda t, **site: [
+        ("solo_eui", {"channel": "fsi_174"}), ("stereo_euvi", {"channel": "euvi_195"})])
+    p = parsed_for({"superlative": True})
+    events.expand(p)
+    assert sources_of(p) == ["flares", "goes_xrs", "sdo_images", "sdo_images", "solo_eui",
+                             "stereo_euvi", "solo_stix", "fism", "viewpoints"]
+
+
+def test_a_flare_that_cannot_be_placed_still_gets_viewpoints_without_a_site(stub_hek):
+    stub_hek(make_flare(utc(2022, 4, 20, 3, 57), x=0.0, y=-104.0))
+    p = parsed_for({"superlative": True})
+    events.expand(p)
+    vp = p.requests[-1]
+    assert vp.source == "viewpoints" and "hpc" not in vp.extras and "hgs" not in vp.extras
 
 
 def test_pre_sdo_falls_back_to_eit_without_stix(stub_hek):
@@ -154,3 +180,15 @@ def test_non_flare_query_is_noop():
 ])
 def test_has_position(x, y, expected):
     assert make_flare(utc(2022, 1, 1), x=x, y=y).has_position is expected
+
+
+def test_flare_at_a_minute_looks_at_that_minute(monkeypatch):
+    asked = []
+    monkeypatch.setattr(events.hek, "flare_near", lambda t, **kw: asked.append(t) or None)
+    p = parsed_for({"at": True}, start=utc(2024, 5, 14, 16, 51), end=utc(2024, 5, 14, 17, 51))
+    with pytest.raises(RuntimeError):
+        events.expand(p)
+    p = parsed_for({"at": True}, start=utc(2024, 5, 14), end=utc(2024, 5, 15))
+    with pytest.raises(RuntimeError):
+        events.expand(p)
+    assert asked == [utc(2024, 5, 14, 16, 51), utc(2024, 5, 14, 12)]

@@ -194,6 +194,26 @@ Existing: `solo_eui`, `solo_stix`, `positions`. Add:
   GOES. For far-side flares show the STIX Data Center's estimated GOES class.
 - Optional: PUNCH (Helioviewer) for CME context.
 
+### Phase 4 status (2026-11-26) — done (backend + UI)
+- `sources/stereo_euvi.py`: Helioviewer EUVI-A 171/195/284/304 (ids 20–23), from 2006-12.
+- `core/viewpoints.py` + `sources/viewpoints.py` (kind `viewpoints`): flare site from HEK
+  (hpc → Stonyhurst, orthographic) or, with no HEK position, the region's latest SRS position
+  rotated to the peak (past the limb allowed). Observers: Earth (astropy), Solar Orbiter and
+  STEREO-A (Horizons, cached per 10 min). Per observer: θ from disk centre, status on disk
+  (<70°) / near limb / behind limb (<20° past θ_L = acos(R/D); height that clears the limb
+  h = R(1/cos(θ−θ_L) − 1)) / far side; light lead vs Earth. Unplaced flares still get
+  positions + STIX.
+- STIX: the quicklook light curve was already light-time corrected by the Data Center
+  (`ltc=true`); provenance now states the shift (DELTA_LIGHT_TIME). Flare list
+  (`/api/request/flare-list`) times are Solar Orbiter's (checked: list peak 17:04:08 vs
+  uncorrected LC max 17:03:44, corrected 17:06:01) → shifted by the light lead. Shows GOES
+  seen + STIX-estimated GOES class (mean, min–max).
+- Event view (`events.expand`, flares since 2006-10): adds `viewpoints`, plus EUI FSI 174 /
+  EUVI-A 195 to the image grid when that spacecraft has the site on disk/limb/behind limb and
+  Helioviewer has an image within 1 h of the peak.
+- Fixed: "flare at T" looked up the flare nearest T + 30 min (window midpoint); now T.
+- PUNCH: not done (optional).
+
 ---
 
 ## Model split

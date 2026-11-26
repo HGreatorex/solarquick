@@ -43,6 +43,7 @@ solarapp/
 │   │   ├── live.py          ← LIVE mode: SWPC feeds → page blocks for /api/live
 │   │   ├── stats.py         ← STATS page: SWPC daily archives → flare statistics
 │   │   ├── artrack.py       ← AR tracker extras: flares, mag class, SHARP (JSOC), cut-outs
+│   │   ├── viewpoints.py    ← flare site seen from Earth / SolO / STEREO-A; STIX flare list
 │   │   ├── timings.py       ← learned per-source durations (~/.cache/solarapp)
 │   │   ├── helioviewer.py   ← shared Helioviewer image pipeline (channel tables)
 │   │   ├── tsutil.py        ← df→series, clip, downsample, energy-band select
@@ -67,7 +68,7 @@ solarapp/
 │   └── server/
 │       ├── app.py           ← FastAPI: /api/query(+/stream), /api/sources, static/
 │       └── static/index.html← two-pane UI: form (left) + image grid & plots (right)
-└── tests/                   ← 505, all offline
+└── tests/                   ← 525, all offline
 ```
 
 ## The two-pane UI
@@ -307,6 +308,10 @@ It is a view over NOAA SWPC's open feeds, not a DataSource: no window, no parser
   so classes match SWPC's, not the NCEI science archive's.
 - Caveats: the page must stay open for alerts; detection latency is the poll interval
   plus SWPC's own ~1 min.
+
+## Multi-viewpoint (Phase 4)
+
+Event views since 2006-10 get a `viewpoints` block (sources/viewpoints.py → core/viewpoints.build): the flare site in Stonyhurst coordinates, each observer's angle to it and whether it is on disk, near or behind the limb, or on the far side, light-travel lead vs Earth, and the STIX flare list shifted to Earth time with STIX-estimated GOES classes. `events.expand` adds EUI FSI / EUVI-A (sources/stereo_euvi.py) images where the spacecraft can see the site. Details: SPEC_LIVE_STATS.md, Phase 4 status.
 
 ## AR tracker (Phase 3)
 
@@ -571,7 +576,7 @@ fail alone with `{"error"}`). Field-by-field contract: SPEC_LIVE_STATS.md, Phase
 
 To continue: read this file + `core/registry.py` + one existing source plugin;
 that is the whole mental model. Add sources by copying `goes_xrs.py` as a
-template. Tests: `pytest tests/` (505, all offline — external APIs are never
+template. Tests: `pytest tests/` (525, all offline — external APIs are never
 called from the suite, and a test that quietly starts doing so shows up as a
 suite that takes twenty seconds instead of one).
 

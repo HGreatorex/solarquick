@@ -70,8 +70,14 @@ class SoloStix(DataSource):
             counts = d["light_curves"][key][::stride]
             series.append({"name": label, "times": times, "values": counts})
 
-        ltc = "light-time corrected to Earth UT" if d.get("IS_LIGHT_TIME_CORRECTED") \
-            else "spacecraft UT (not light-time corrected)"
+        lead = d.get("DELTA_LIGHT_TIME")
+        if d.get("IS_LIGHT_TIME_CORRECTED"):
+            # the server moves Solar Orbiter's clock onto Earth's: light from the Sun
+            # reaches the spacecraft `lead` seconds before it reaches 1 AU
+            ltc = ("light-time corrected to Earth UT" +
+                   (f" (shifted {lead:+.0f} s to 1 AU)" if isinstance(lead, (int, float)) else ""))
+        else:
+            ltc = "spacecraft UT (not light-time corrected)"
         return {
             "title": f"SolO STIX quicklook  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT",
             "series": series,

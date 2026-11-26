@@ -148,6 +148,18 @@ def _regions_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
     return "region", cols, rows
 
 
+def _viewpoints_rows(spec: PlotSpec) -> tuple[str, list[str], list[list]]:
+    """Each observer's geometry for the flare site (site columns blank when unplaced)."""
+    obs = spec.get("observers") or []
+    if not obs:
+        raise NotExportable("no observers in this result to export")
+    cols = ["distance_au", "stonyhurst_lon_deg", "stonyhurst_lat_deg", "site_angle_deg",
+            "status", "visible_above_mm", "light_lead_s"]
+    rows = [[o.get("name"), o.get("r_au"), o.get("lon"), o.get("lat"), o.get("theta"),
+             o.get("status"), o.get("visible_above_mm"), o.get("light_lead_s")] for o in obs]
+    return "observer", cols, rows
+
+
 _WRITERS = {
     "spectrogram": _spectrogram_rows,
     "spectral_movie": _movie_rows,
@@ -155,6 +167,7 @@ _WRITERS = {
     "positions": _positions_rows,
     "earthmap": _earthmap_rows,
     "regions": _regions_rows,
+    "viewpoints": _viewpoints_rows,
 }
 
 

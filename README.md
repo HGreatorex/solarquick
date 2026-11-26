@@ -175,6 +175,13 @@ instrument to go deeper.
 
 Examples that work:
 
+**A flare from three vantage points** — any event view since 2006 (e.g.
+`flare at 2024-05-14 16:51`) ends with a VIEWPOINTS block: where the site sits for
+Earth, Solar Orbiter and STEREO-A (on disk, near or behind the limb, far side), a
+map of the three, and the STIX flare list with its estimated GOES classes. Solar
+Orbiter EUI and STEREO-A EUVI images join the grid when they can see the site.
+`stereo euvi 195 2024-05-14` asks for STEREO-A images directly.
+
 **One active region over its disk passage**
 ```
 ar 2673 from 2017-08-29 to 2017-09-11

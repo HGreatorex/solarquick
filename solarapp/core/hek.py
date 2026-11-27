@@ -12,10 +12,40 @@ result set stays small even over decade-long windows (130 X-class rows for
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 CLASS_LETTERS = "ABCMX"
+
+# A GOES class as people write one: "X1.0", "M5.2", "x9.3", "X17". A, B and C
+# need the decimal so LASCO "C2"/"C3" never read as flares; M and X may drop
+# it ("X17", "m5"). Never date material — timegrammar strips these before
+# reading dates, or dateutil turns "X1.0 … 2024" into 2001.
+GOES_CLASS_RE = re.compile(
+    r"(?<![\w.])(?:[abc]\d{1,2}\.\d{1,2}|[mx]\d{1,2}(?:\.\d{1,2})?)(?![\w.])", re.I)
+
+
+def normalise_class(text: str) -> str:
+    """"x1" → "X1.0", "m5.2" → "M5.2"."""
+    letter, mag = text[0].upper(), text[1:]
+    return letter + (mag if "." in mag else f"{mag}.0")
+
+
+def near_class(a: str, b: str, tol: float = 1e-6) -> bool:
+    """GOES magnitudes within a fraction `tol` of b ("X17" == "X17.0")."""
+    ra, rb = class_rank(a), class_rank(b)
+    return ra > 0 and rb > 0 and abs(ra - rb) <= tol * rb
+
+
+def same_class(a: str, b: str) -> bool:
+    return near_class(a, b)
+
+
+def class_from_rank(rank: float) -> str:
+    """Inverse of class_rank: 9000 → "M9.0"."""
+    idx = max(0, min(4, int(math.floor(math.log10(rank)))))
+    return f"{CLASS_LETTERS[idx]}{rank / 10 ** idx:.1f}"
 
 
 def class_rank(goes_class: str) -> float:
@@ -69,11 +99,16 @@ def search_flares(start: datetime, end: datetime, min_class: str | None = None) 
     from sunpy.net import attrs as a
 
     terms = [a.Time(start, end), a.hek.EventType("FL"), a.hek.OBS.Observatory == "GOES"]
+    floor = 0.0
     if min_class:
         cls = min_class.upper()
         if len(cls) == 1:
             cls += "1.0"
-        terms.append(a.hek.FL.GOESCls >= cls)
+        floor = class_rank(cls)
+        # HEK compares GOES classes as *strings*: ">= X8.4" drops X17, X10
+        # and X28 ("X1" < "X8"). Letters do order correctly (A<B<C<M<X), so
+        # HEK gets the letter and the magnitude is filtered below.
+        terms.append(a.hek.FL.GOESCls >= cls[0] + "1.0")
     result = Fido.search(*terms)
     table = result["hek"]
 
@@ -92,6 +127,8 @@ def search_flares(start: datetime, end: datetime, min_class: str | None = None) 
             ))
         except (TypeError, ValueError):
             continue
+    if floor:
+        flares = [f for f in flares if f.rank >= floor * (1 - 1e-6)]
     flares.sort(key=lambda f: f.peak)
     return flares
 

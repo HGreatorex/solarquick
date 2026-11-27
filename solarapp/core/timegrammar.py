@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 from dateutil import parser as dtparser
 
+from .hek import GOES_CLASS_RE
 from .registry import keyword_regex
 
 # -- shared patterns -----------------------------------------------------
@@ -43,6 +44,14 @@ _MONTH_RE = re.compile(
 )
 # d/m/y and d.m.y, two- or four-digit year — day-first, as everywhere else
 _SLASH_DATE = re.compile(r"\b(\d{1,2})[/.](\d{1,2})[/.](\d{2}|\d{4})\b")
+# …except when the year leads: 2024/05/08 is always year-month-day, and
+# day-first reading made it 5 August
+_YMD_SLASH = re.compile(r"\b(\d{4})[/.](\d{1,2})[/.](\d{1,2})\b")
+
+
+def _ymd_to_iso(m: re.Match) -> str:
+    y, mo, d = (int(g) for g in m.groups())
+    return f"{y:04d}-{mo:02d}-{d:02d}" if 1 <= mo <= 12 and 1 <= d <= 31 else m.group(0)
 
 _UNITS = {"hour": timedelta(hours=1), "day": timedelta(days=1),
           "week": timedelta(weeks=1), "month": timedelta(days=30),
@@ -464,6 +473,8 @@ def extract(query: str, matched_keywords: list[str]) -> tuple[datetime, datetime
     states a date outright is never reinterpreted by a looser rule.
     """
     q = normalise_numbers(query)
+    q = GOES_CLASS_RE.sub(" ", q)       # "X1.0" is a flare, never a date
+    q = _YMD_SLASH.sub(_ymd_to_iso, q)  # 2024/05/08 → 2024-05-08
     now = _now()
     today = _midnight(now)
 

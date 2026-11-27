@@ -3,7 +3,8 @@
 Three query shapes, resolved with core/events.py:
 - list:        "flares yesterday", "x-class flares in july 2026"
 - superlative: "biggest flare since 2014" → single event, auto-composed view
-- pinpoint:    "flare at 2017-09-06 12:02" (event-list rows click through here)
+- pinpoint:    "flare at 2017-09-06 12:02" (event-list rows click through here),
+               "flare 2017-09-06 12:02", or a GOES class: "8 may 2024 01:41 X1.0"
 
 The returned PlotSpec (kind "events") carries `markers` — flare peak times —
 which the frontend overlays on any timeseries plotted in the same request
@@ -21,6 +22,10 @@ from solarapp.core.registry import DataSource, PlotSpec, Variable
 _ABOVE = re.compile(r"\b(?:above|over|>=?)\s*([abcmx])\s*(\d+(?:\.\d+)?)?", re.I)
 _SUPERLATIVE = re.compile(r"\b(biggest|largest|strongest|most powerful)\b", re.I)
 _AT = re.compile(r"\bflare\s+at\b", re.I)
+# "flare 8 may 2024 01:41": one flare, a time to the minute → that flare.
+# "flare list …" and plural "flares" stay lists.
+_SINGULAR = re.compile(r"\bflare\b(?!\s*(?:list|catalog))", re.I)
+_MINUTE = re.compile(r"\b\d{1,2}:\d{2}\b|\b\d{4}\s?(?:ut|utc|z)\b", re.I)
 
 
 class Flares(DataSource):
@@ -39,6 +44,19 @@ class Flares(DataSource):
         for c in ("X", "M", "C", "B", "A")
     ]
 
+    def score(self, text: str) -> int:
+        # a lone GOES class ("X1.0") routes here; next to an instrument it
+        # loses the segment, and the parser adds the flare request itself
+        return super().score(text) + (1 if self._class_match(text) else 0)
+
+    @staticmethod
+    def _class_match(text: str):
+        above = _ABOVE.search(text)  # "above M5" is a threshold, not one flare
+        for m in hek.GOES_CLASS_RE.finditer(text):
+            if not (above and above.start() <= m.start() < above.end()):
+                return m
+        return None
+
     def parse_extras(self, query: str) -> tuple[dict, list[str]]:
         # the declared variables cover the bare letters ("x-class"); a
         # threshold that carries a number ("above M5") needs the regex, and
@@ -50,13 +68,22 @@ class Flares(DataSource):
             consumed.append(m.group(0))
         if _SUPERLATIVE.search(query):
             extras["superlative"] = True
-        if _AT.search(query):
+        if _AT.search(query) or (_SINGULAR.search(query) and _MINUTE.search(query)):
             extras["at"] = True
+        cls = self._class_match(query)
+        if cls:
+            extras["goes_class"] = hek.normalise_class(cls.group(0))
+            consumed.append(cls.group(0))
         return extras, consumed
 
     def fetch(self, start: datetime, end: datetime, **extras) -> PlotSpec:
-        min_class = extras.get("min_class")
+        class_eq = extras.get("class_eq")  # several flares of one class
+        tol = extras.get("class_tol", 1e-6)
+        min_class = (hek.class_from_rank(hek.class_rank(class_eq) * (1 - tol))
+                     if class_eq else extras.get("min_class"))
         flares = hek.search_flares(start, end, min_class=min_class)
+        if class_eq:
+            flares = [f for f in flares if hek.near_class(f.goes_class, class_eq, tol)]
         pin = extras.get("pin_peak")
 
         try:  # an SRS outage must not cost the flare list
@@ -82,7 +109,8 @@ class Flares(DataSource):
             })
             markers.append({"t": f.peak.isoformat(), "label": f.goes_class or "?"})
 
-        what = f"{min_class}-class flares" if min_class else "Flares"
+        what = (f"{class_eq} flares" if class_eq else
+                f"{min_class}-class flares" if min_class else "Flares")
         spec: PlotSpec = {
             "kind": "events",
             "title": f"{what}  {start:%Y-%m-%d %H:%M} – {end:%Y-%m-%d %H:%M} UT",

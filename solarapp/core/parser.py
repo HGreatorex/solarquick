@@ -37,7 +37,7 @@ from __future__ import annotations
 import difflib
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from . import summary as summary_view
 from . import timegrammar as tg
@@ -72,6 +72,8 @@ class ParsedQuery:
     rewritten: tuple[str, str] | None = None
     # set when no instrument was named and the overview was composed instead
     summary: str | None = None
+    # what event resolution wants the user told ("no X1.0 near …; showing X1.1")
+    notes: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -88,6 +90,7 @@ class ParsedQuery:
             notes.append(f"{reading} Read as: “{canonical}”.")
         if self.summary:
             notes.append(self.summary)
+        notes += self.notes
         return " ".join(notes)
 
 
@@ -117,6 +120,8 @@ _GRAMMAR_WORDS = {
     # here too or _autocorrect would "fix" them into something else
     "high", "full", "resolution", "res", "cadence", "second", "seconds",
     "channel", "band", "bands", "detector", "line", "lines", "index",
+    # ordinal suffixes: "8th May" splits into "8" + "th"
+    "st", "nd", "rd", "th", "am", "pm",
 }
 _GRAMMAR_WORDS |= {w for kw in summary_view.KEYWORDS for w in re.findall(r"[a-z]+", kw)}
 
@@ -281,6 +286,14 @@ def _match_requests(
         extras, used = registry.get(name).parse_extras(seg)
         add(name, extras, used)
 
+    # "goes xrs and aia 131 for the X1.0 on 8 may 2024": the class lost its
+    # segment to AIA, but it still names the flare the window is about
+    if requests and not any(r.source == "flares" for r in requests) and "flares" in registry.sources:
+        flares = registry.get("flares")
+        if flares._class_match(query.lower()):
+            extras, used = flares.parse_extras(query)
+            add("flares", extras, used)
+
     if not requests and not ambiguities:  # no segment matched — try the whole query
         name, tied = _match_source(query, registry)
         if name is not None and len(tied) > 1:
@@ -423,6 +436,15 @@ def _parse_once(query: str, registry: Registry) -> ParsedQuery:
         for kw in registry.get(req.source).matched_keywords(query.lower())
     ] + consumed
     tr = tg.extract(query, matched)
+
+    if tr is None:
+        # "X9.3" with no date names one flare: search the whole catalog for it
+        req = next((r for r in result.requests
+                    if r.source == "flares" and "goes_class" in r.extras), None)
+        if req is not None:
+            start = datetime.fromisoformat(registry.get("flares").coverage[0])
+            tr = (start.replace(tzinfo=timezone.utc), datetime.now(timezone.utc))
+            req.extras["catalog_wide"] = True
 
     if not result.requests:
         # Nothing named an instrument. A query that is *only* a date is a
